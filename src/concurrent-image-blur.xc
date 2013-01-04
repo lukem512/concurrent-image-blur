@@ -25,14 +25,11 @@ typedef unsigned char uchar;
 uchar blur(uchar neighbours[NEIGHBOURS], int boundary) {
 	int blurred;
 
-	if (boundary) {
-		// Set to black if this is a boundary pixel
-		blurred = BLACK;
+	// Set initial value to black
+	// this will not be changed if the pixel is a boundary value
+	blurred = BLACK;
 
-		printf ("Boundary detected, returning 0\n");
-	} else {
-		blurred = 0;
-
+	if (!boundary) {
 		// Set to average of values
 		for (int i = 0; i < NEIGHBOURS; i++)
 			blurred += neighbours[i];
@@ -43,8 +40,10 @@ uchar blur(uchar neighbours[NEIGHBOURS], int boundary) {
 		if (blurred > 255)
 			blurred = 255;
 
-		if (blurred != neighbours[4])
-			printf ("Returning blurred pixel of value %d\n", blurred);
+		//if (blurred != neighbours[4])
+		//	printf ("Returning blurred pixel of value %d\n", blurred);
+		//else
+		//	printf ("Value of pixel remains unchanged\n");
 	}
 
 	return (uchar) blurred;
@@ -99,25 +98,37 @@ void distributor(chanend c_in, chanend c_out) {
 	printf("ProcessImage:Start, size = %dx%d\n", IMHT, IMWD);
 
 	// TODO - This code is to be replaced – it is a place holder for farming out the work...
+	yoffset = 0;
 	for (int y = 0; y < IMHT; y++) {
-		yoffset = y * IMHT;
-
 		if (y == 0 || y == (IMHT - 1)) {
 			yboundary = 1;
 		}
 
 		for (int x = 0; x < IMWD; x++) {
 			c_in :> img[yoffset + x];
+		}
 
+		// Increase y-offset
+		yoffset += IMHT;
+	}
+
+	// TODO - this code needs replacing
+	yoffset = 0;
+	for (int y = 0; y < IMHT; y++) {
+		if (y == 0 || y == (IMHT - 1)) {
+			yboundary = 1;
+		}
+
+		for (int x = 0; x < IMWD; x++) {
 			if (x == 0 || x == (IMWD - 1)) {
 				xboundary = 1;
 			}
 
 			if (!yboundary && !xboundary) {
 				// Previous row
-				n[0] = img[yoffset - IMHT + x - 1];
-				n[1] = img[yoffset - IMHT + x];
-				n[2] = img[yoffset - IMHT + x + 1];
+				n[0] = img[yoffset - IMWD + x - 1];
+				n[1] = img[yoffset - IMWD + x];
+				n[2] = img[yoffset - IMWD + x + 1];
 
 				// Current row
 				n[3] = img[yoffset + x - 1];
@@ -143,6 +154,9 @@ void distributor(chanend c_in, chanend c_out) {
 
 		// Reset boundary flag for next row
 		yboundary = 0;
+
+		// Increase y-offset
+		yoffset += IMHT;
 	}
 
 	printf("ProcessImage:Done...\n");
