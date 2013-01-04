@@ -12,10 +12,24 @@ typedef unsigned char uchar;
 #include <stdio.h>
 #include "pgmIO.h"
 
+// Image dimensions
 #define IMHT 16
 #define IMWD 16
+
+// Number of neighbours to blur
 #define NEIGHBOURS 9
+
+// Colour black as a uchar value
 #define BLACK 0
+
+// The maximum number of workers to spawn
+#define MAX_WORKERS 8
+
+// The input and output filenames
+#define INFNAME "test/test0.pgm"
+#define OUTFNAME "test/testout.pgm"
+//#define INFNAME "O:\\test0.pgm"
+//#define OUTFNAME "O:\\test0.pgm"
 
 /////////////////////////////////////////////////////////////////////////////////////////
 //
@@ -39,11 +53,6 @@ uchar blur(uchar neighbours[NEIGHBOURS], int boundary) {
 		// avoid uchar overflow
 		if (blurred > 255)
 			blurred = 255;
-
-		//if (blurred != neighbours[4])
-		//	printf ("Returning blurred pixel of value %d\n", blurred);
-		//else
-		//	printf ("Value of pixel remains unchanged\n");
 	}
 
 	return (uchar) blurred;
@@ -88,7 +97,7 @@ void DataInStream(char infname[], chanend c_out) {
 // Start your implementation by changing this function to farm out parts of the image...
 //
 /////////////////////////////////////////////////////////////////////////////////////////
-void distributor(chanend c_in, chanend c_out) {
+void distributor(chanend c_in, chanend c_out, chanend c_workers[]) {
 	uchar val;
 	uchar img[IMHT * IMWD];
 	uchar n[NEIGHBOURS];
@@ -214,19 +223,21 @@ void DataOutStream(char outfname[], chanend c_in) {
 
 //MAIN PROCESS defining channels, orchestrating and starting the threads
 int main() {
-	//char infname[] = "O:\\test0.pgm"; //put your input image path here
-	//char outfname[] = "O:\\testout.pgm"; //put your output image path here
-	char infname[] = "test/test0.pgm"; //put your input image path here
-	char outfname[] = "test/testout.pgm"; //put your output image path here
 	chan c_inIO, c_outIO; //extend your channel definitions here
+	chan c_workers[MAX_WORKERS];
 
 	// TODO - extend/change this par statement to implement your concurrent filter
 	par {
-		DataInStream(infname, c_inIO);
-		distributor(c_inIO, c_outIO);
-		DataOutStream(outfname, c_outIO);
+		on stdcore[0]: DataInStream(INFNAME, c_inIO);
+		on stdcore[1]: distributor(c_inIO, c_outIO, c_workers);
+		on stdcore[2]: DataOutStream(OUTFNAME, c_outIO);
+
+		// Replication of workers
+		par (int k=0;k<MAX_WORKERS;k++) {
+			on stdcore[k%4]: worker(c_workers[k]);
+		}
 	}
 
-	printf("Main:Done...\n");
+	// Return success
 	return 0;
 }
