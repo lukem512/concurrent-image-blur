@@ -13,8 +13,8 @@ typedef unsigned char uchar;
 #include "pgmIO.h"
 
 // Image dimensions
-#define IMHT 16
-#define IMWD 16
+#define IMHT 256
+#define IMWD 400
 
 // Number of neighbours to blur
 #define NEIGHBOURS 9
@@ -23,7 +23,7 @@ typedef unsigned char uchar;
 #define BLACK 0
 
 // The maximum number of workers to spawn
-#define MAX_WORKERS 8
+#define MAX_WORKERS 16
 
 // The number of lines of the image to store
 #define LINES_STORED 3
@@ -32,8 +32,8 @@ typedef unsigned char uchar;
 #define SHUTDOWN -1
 
 // The input and output filenames
-#define INFNAME "test/test0.pgm"
-#define OUTFNAME "test/testout.pgm"
+#define INFNAME "test/BristolCathedral.pgm"
+#define OUTFNAME "test/testout2.pgm"
 //#define INFNAME "O:\\test0.pgm"
 //#define OUTFNAME "O:\\test0.pgm"
 
@@ -94,15 +94,10 @@ int prev_line (int line_idx) {
 /////////////////////////////////////////////////////////////////////////////////////////
 void distributor(chanend c_in, chanend c_out, chanend c_workers[]) {
 	uchar val;
-	//uchar img[IMHT * IMWD];
-	//uchar n[NEIGHBOURS];
-	//int yoffset;
-	//int xboundary, yboundary;
+	uchar line[LINES_STORED][IMWD];
 	int boundary;
-
 	int line_idx = 0;
 	int pixel_idx = 0;
-	uchar line[LINES_STORED][IMWD];
 
 	printf("ProcessImage:Start, size = %dx%d\n", IMHT, IMWD);
 
@@ -167,7 +162,7 @@ void distributor(chanend c_in, chanend c_out, chanend c_workers[]) {
 
 						// Current line
 						//printf ("ProcessImage:4\n");
-						c_workers[i] <: line[cur_line(line_idx)][pixel_idx-1]; // does it break here?!
+						c_workers[i] <: line[cur_line(line_idx)][pixel_idx-1];
 						//printf ("ProcessImage:5\n");
 						c_workers[i] <: line[cur_line(line_idx)][pixel_idx];
 						//printf ("ProcessImage:6\n");
@@ -246,7 +241,7 @@ void worker(chanend c_dist) {
 			//printf ("Worker:Not boundary!\n");
 			for (int i = 0; i < NEIGHBOURS; i++) {
 				//printf ("Worker:Waiting for value %d\n", i+1);
-				c_dist :> val; // SIGNAL ERROR ET_ECALL [TODO] for Line 3
+				c_dist :> val;
 				//printf ("Worker:Received value #%d (%d) from channel\n", i+1, val);
 				blurred += val;
 			}
@@ -307,7 +302,6 @@ int main() {
 	chan c_inIO, c_outIO; //extend your channel definitions here
 	chan c_workers[MAX_WORKERS];
 
-	// TODO - extend/change this par statement to implement your concurrent filter
 	par {
 		on stdcore[0]: DataInStream(INFNAME, c_inIO);
 		on stdcore[1]: distributor(c_inIO, c_outIO, c_workers);
