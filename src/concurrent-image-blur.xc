@@ -39,33 +39,6 @@ typedef unsigned char uchar;
 
 /////////////////////////////////////////////////////////////////////////////////////////
 //
-// Method to blur a pixel given it's eight neighbouring pixels
-//
-/////////////////////////////////////////////////////////////////////////////////////////
-uchar blur(uchar neighbours[NEIGHBOURS], int boundary) {
-	int blurred;
-
-	// Set initial value to black
-	// this will not be changed if the pixel is a boundary value
-	blurred = BLACK;
-
-	if (!boundary) {
-		// Set to average of values
-		for (int i = 0; i < NEIGHBOURS; i++)
-			blurred += neighbours[i];
-
-		blurred = blurred / NEIGHBOURS;
-
-		// avoid uchar overflow
-		if (blurred > 255)
-			blurred = 255;
-	}
-
-	return (uchar) blurred;
-}
-
-/////////////////////////////////////////////////////////////////////////////////////////
-//
 // Read Image from pgm file with path and name infname[] to channel c_out
 //
 /////////////////////////////////////////////////////////////////////////////////////////
