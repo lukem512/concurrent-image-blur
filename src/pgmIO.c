@@ -1,216 +1,173 @@
-/////////////////////////////////////////////////////////////////////////////////////////
-//
-// COMS20600 - WEEKS 9 to 12
-// ASSIGNMENT 3
-// CODE SKELETON
-// TITLE: "Concurrent Image Filter"
-//
-/////////////////////////////////////////////////////////////////////////////////////////
-typedef unsigned char uchar;
-
-#include <platform.h>
-#include <stdio.h>
 #include "pgmIO.h"
 
-#define IMHT 16
-#define IMWD 16
-#define NEIGHBOURS 9
-#define BLACK 0
+FILE *_INFP = NULL;
+FILE *_OUTFP = NULL;
 
-/////////////////////////////////////////////////////////////////////////////////////////
-//
-// Method to blur a pixel given it's eight neighbouring pixels
-//
-/////////////////////////////////////////////////////////////////////////////////////////
-uchar blur(uchar neighbours[NEIGHBOURS], int boundary) {
-	int blurred;
+/////////////////////////////////////////////////////////////////////////////////////////////
+//Line-wise pgm in:
+int _openinpgm(char fname[], int width, int height)
+{
+	char str[ 64 ];
+    int inwidth, inheight;
 
-	if (boundary) {
-		// Set to black if this is a boundary pixel
-		blurred = BLACK;
-
-		printf ("Boundary detected, returning 0\n");
-	} else {
-		blurred = 0;
-
-		// Set to average of values
-		for (int i = 0; i < NEIGHBOURS; i++)
-			blurred += neighbours[i];
-
-		blurred = blurred / NEIGHBOURS;
-
-		// avoid uchar overflow
-		if (blurred > 255)
-			blurred = 255;
-
-		if (blurred != neighbours[4])
-			printf ("Returning blurred pixel of value %d\n", blurred);
+	_INFP = fopen( fname, "rb" );
+	if( _INFP == NULL )
+	{
+		printf( "Could not open %s.\n", fname );
+		return -1;
 	}
-
-	return (uchar) blurred;
-}
-
-/////////////////////////////////////////////////////////////////////////////////////////
-//
-// Read Image from pgm file with path and name infname[] to channel c_out
-//
-/////////////////////////////////////////////////////////////////////////////////////////
-void DataInStream(char infname[], chanend c_out) {
-	int res;
-	uchar line[IMWD];
-
-	printf("DataInStream:Start...\n");
-
-	res = _openinpgm(infname, IMWD, IMHT);
-
-	if (res) {
-		printf("DataInStream:Error openening %s\n.", infname);
-		return;
-	}
-
-	for (int y = 0; y < IMHT; y++) {
-		_readinline(line, IMWD);
-
-		for (int x = 0; x < IMWD; x++) {
-			c_out <: line[ x ];
-			//printf( "-%4.1d ", line[ x ] ); //uncomment to show image values
-		}
-
-		//printf( "\n" ); //uncomment to show image values
-	}
-
-	_closeinpgm();
-	printf( "DataInStream:Done...\n" );
-	return;
-}
-
-/////////////////////////////////////////////////////////////////////////////////////////
-//
-// Start your implementation by changing this function to farm out parts of the image...
-//
-/////////////////////////////////////////////////////////////////////////////////////////
-void distributor(chanend c_in, chanend c_out) {
-	uchar val;
-	uchar img[IMHT * IMWD];
-	uchar n[NEIGHBOURS];
-	int yoffset;
-	int xboundary, yboundary;
-
-	printf("ProcessImage:Start, size = %dx%d\n", IMHT, IMWD);
-
-	// TODO - This code is to be replaced – it is a place holder for farming out the work...
-	for (int y = 0; y < IMHT; y++) {
-		yoffset = y * IMHT;
-
-		if (y == 0 || y == (IMHT - 1)) {
-			yboundary = 1;
-		}
-
-		for (int x = 0; x < IMWD; x++) {
-			c_in :> img[yoffset + x];
-
-			if (x == 0 || x == (IMWD - 1)) {
-				xboundary = 1;
-			}
-
-			if (!yboundary && !xboundary) {
-				// Previous row
-				n[0] = img[yoffset - IMHT + x - 1];
-				n[1] = img[yoffset - IMHT + x];
-				n[2] = img[yoffset - IMHT + x + 1];
-
-				// Current row
-				n[3] = img[yoffset + x - 1];
-				n[4] = img[yoffset + x];
-				n[5] = img[yoffset + x + 1];
-
-				// Next row
-				n[6] = img[yoffset + IMWD + x - 1];
-				n[7] = img[yoffset + IMWD + x];
-				n[8] = img[yoffset + IMWD + x + 1];
-			}
-
-			//printf ("Blurring pixel (%d, %d)\n", y, x);
-			val = blur(n, (xboundary | yboundary));
-			//printf ("Got %d\n", val);
-
-			//Need to cast
-			c_out <: (uchar)(val);
-
-			// Reset boundary flag for next col
-			xboundary = 0;
-		}
-
-		// Reset boundary flag for next row
-		yboundary = 0;
-	}
-
-	printf("ProcessImage:Done...\n");
-}
-
-/////////////////////////////////////////////////////////////////////////////////////////
-//
-// Worker thread
-//
-/////////////////////////////////////////////////////////////////////////////////////////
-void worker(chanend c_dist) {
-	uchar val;
-	int boundary;
-
-	c_dist :> val;
-
-	// TODO
-
-	c_dist <: val;
-}
-
-/////////////////////////////////////////////////////////////////////////////////////////
-//
-// Write pixel stream from channel c_in to pgm image file
-//
-/////////////////////////////////////////////////////////////////////////////////////////
-void DataOutStream(char outfname[], chanend c_in) {
-	int res;
-
-	uchar line[IMWD];
-
-	printf("DataOutStream:Start...\n");
-
-	res = _openoutpgm(outfname, IMWD, IMHT);
-
-	if (res) {
-		printf("DataOutStream:Error opening %s\n.", outfname);
-		return;
-	}
-
-	for (int y = 0; y < IMHT; y++) {
-		for (int x = 0; x < IMWD; x++) {
-			c_in :> line[x];
-			//printf( "+%4.1d ", line[x] );
-			}
-
-		//printf( "\n" );
-		_writeoutline( line, IMWD );
-	}
-
-	_closeoutpgm();
-	printf( "DataOutStream:Done...\n" );
-	return;
-}
-
-//MAIN PROCESS defining channels, orchestrating and starting the threads
-int main() {
-	char infname[] = "O:\\test0.pgm"; //put your input image path here
-	char outfname[] = "O:\\testout.pgm"; //put your output image path here
-	chan c_inIO, c_outIO; //extend your channel definitions here
-
-	// TODO - extend/change this par statement to implement your concurrent filter
-	par {
-		DataInStream(infname, c_inIO);
-		distributor(c_inIO, c_outIO);
-		DataOutStream(outfname, c_outIO);
-	}
-
-	printf("Main:Done...\n");
+	//Strip off header
+    fgets( str, 64, _INFP ); //Version: P5
+    fgets( str, 64, _INFP ); //width and height
+    sscanf( str, "%d%d", &inwidth, &inheight );
+    if( inwidth != width || inheight != height )
+    {
+    	printf( "Input image size(%dx%d) does not = %dx%d or trouble reading header\n", inwidth, inheight, width, height );
+    	return -1;
+    }
+    fgets( str, 64, _INFP ); //bit depth, must be 255
 	return 0;
+}
+
+int _readinline(unsigned char line[], int width)
+{
+	int nb;
+
+	if( _INFP == NULL )
+	{
+		return -1;
+	}
+
+	nb = fread( line, 1, width, _INFP );
+
+	if( nb != width )
+	{
+		//printf( "Error reading line, nb = %d\n", nb );
+		//Error or end of file
+		return -1;
+	}
+	return 0;
+}
+
+int _closeinpgm()
+{
+	int ret = fclose( _INFP );
+	if( ret == 0 )
+	{
+		_INFP = NULL;
+	}
+	else
+	{
+		printf( "Error closing file _INFP.\n" );
+	}
+	return ret; //return zero for succes and EOF for fail
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////////
+//Line-wise pgm out:
+int _openoutpgm(char fname[], int width, int height)
+{
+    char hdr[ 64 ];
+
+	_OUTFP = fopen( fname, "wb" );
+	if( _OUTFP == NULL )
+	{
+		printf( "Could not open %s.\n", fname );
+		return -1;
+	}
+
+    sprintf( hdr, "P5\n%d %d\n255\n", width, height );
+    fprintf( _OUTFP, "%s", hdr );
+
+	return 0;
+}
+
+int _writeoutline(unsigned char line[], int width)
+{
+	int nb;
+
+	if( _OUTFP == NULL )
+	{
+		return -1;
+	}
+
+	nb = fwrite( line, 1, width, _OUTFP );
+
+	if( nb != width )
+	{
+		//printf( "Error writing line, nb = %d\n", nb );
+		//Error or end of file
+		return -1;
+	}
+	return 0;
+}
+
+int _closeoutpgm()
+{
+	int ret = fclose( _OUTFP );
+	if( ret == 0 )
+	{
+		_OUTFP = NULL;
+	}
+	else
+	{
+		printf( "Error closing file _OUTFP.\n" );
+	}
+	return ret; //return zero for succes and EOF for fail
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////////
+//Standard pgm IO:
+
+//Input is a referenced array of unsigned chars of width and height and a
+//referenced char array of the system path to destination, e.g.
+//"/home/user/xmos/project/" on Linux or "C:\\user\\xmos\\project\\" on Windows
+int _writepgm(unsigned char x[], int height, int width, char fname[])
+{
+    FILE *fp;
+    int hlen;
+    char hdr[ 64 ];
+
+    sprintf( hdr, "P5\n%d %d\n255\n", width, height );
+    hlen = strlen( hdr );
+	printf( "In writepgm function, writing: %s\n", fname );
+
+	fp = fopen( fname, "wb" );
+	if( fp == NULL)
+	{
+		printf( "Could not open %s for writing.\n", fname );
+		return -1;
+	}
+    fprintf( fp, "%s", hdr );
+    fwrite( x, width * height, 1, fp );
+    fclose( fp );
+    return 0;
+}
+
+int _readpgm(unsigned char x[], int height, int width, char fname[])
+{
+    FILE *fp;
+    int inwidth, inheight;
+    char str[ 64 ];
+
+	printf( "In readpgm function, reading: %s\n", fname );
+
+	fp = fopen( fname, "rb" );
+	if( fp == NULL)
+	{
+		printf( "Could not open %s for reading.\n", fname );
+		return -1;
+	}
+    fgets( str, 64, fp ); //Version: P5
+    fgets( str, 64, fp ); //width and height
+    sscanf( str, "%d%d", &inwidth, &inheight );
+    fgets( str, 64, fp ); //bit depth, must be 255
+    if( inwidth != width || inheight != height )
+    {
+    	printf( "Input image size(%dx%d) does not = %dx%d or trouble reading header\n", inwidth, inheight, width, height );
+    	return -1;
+    }
+    fread( x, inwidth * inheight, 1, fp );
+    fclose( fp );
+    return 0;
 }

@@ -21,3 +21,4 @@ Makefile
 
 # XTime paths
 /bin
+/.build_Debug
