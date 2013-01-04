@@ -25,6 +25,12 @@ typedef unsigned char uchar;
 // The maximum number of workers to spawn
 #define MAX_WORKERS 8
 
+// The number of lines of the image to store
+#define LINES_STORED 3
+
+// Message to shutdown worker
+#define SHUTDOWN -1
+
 // The input and output filenames
 #define INFNAME "test/test0.pgm"
 #define OUTFNAME "test/testout.pgm"
@@ -92,6 +98,22 @@ void DataInStream(char infname[], chanend c_out) {
 	return;
 }
 
+int cur_line (int line_idx) {
+	if (line_idx == 0)
+		return LINES_STORED;
+	else
+		return line_idx - 1;
+}
+
+int prev_line (int line_idx) {
+	int current_line = cur_line (line_idx);
+
+	if (current_line == 0)
+		return LINES_STORED;
+	else
+		return current_line - 1;
+}
+
 /////////////////////////////////////////////////////////////////////////////////////////
 //
 // Start your implementation by changing this function to farm out parts of the image...
@@ -99,76 +121,113 @@ void DataInStream(char infname[], chanend c_out) {
 /////////////////////////////////////////////////////////////////////////////////////////
 void distributor(chanend c_in, chanend c_out, chanend c_workers[]) {
 	uchar val;
-	uchar img[IMHT * IMWD];
-	uchar n[NEIGHBOURS];
-	int yoffset;
-	int xboundary, yboundary;
+	//uchar img[IMHT * IMWD];
+	//uchar n[NEIGHBOURS];
+	//int yoffset;
+	//int xboundary, yboundary;
+	int boundary;
+
+	int line_idx = 0;
+	int pixel_idx = 0;
+	uchar line[LINES_STORED][IMWD];
 
 	printf("ProcessImage:Start, size = %dx%d\n", IMHT, IMWD);
 
-	// TODO - This code is to be replaced – it is a place holder for farming out the work...
-	yoffset = 0;
+	// For every line in the image
 	for (int y = 0; y < IMHT; y++) {
-		if (y == 0 || y == (IMHT - 1)) {
-			yboundary = 1;
-		}
+		//printf ("\n\nProcessImage:Line %d\n\n", y);
 
+		// Retrieve each pixel in the line
 		for (int x = 0; x < IMWD; x++) {
-			c_in :> img[yoffset + x];
+			c_in :> line[line_idx][x];
 		}
 
-		// Increase y-offset
-		yoffset += IMHT;
-	}
-
-	// TODO - this code needs replacing
-	yoffset = 0;
-	for (int y = 0; y < IMHT; y++) {
-		if (y == 0 || y == (IMHT - 1)) {
-			yboundary = 1;
+		// FIRST LINE
+		if (y == 0) {
+			//printf ("ProcessImage:First line...\n");
+			for (int i = 0; i < IMWD; i++)
+				c_out <: (uchar)(BLACK);
+			//printf ("ProcessImage:Done!\n");
 		}
 
-		for (int x = 0; x < IMWD; x++) {
-			if (x == 0 || x == (IMWD - 1)) {
-				xboundary = 1;
+		// SUBSEQUENT LINES
+		// This does nothing for second, as 3 lines need to be stored first
+		if (y > 1) {
+			pixel_idx = 0;
+			while (pixel_idx != IMWD) {
+				// Retrieve value from each worker
+				// and send it to output
+				if ( (y > 2) || ((y == 2) && (pixel_idx > 0)) ) {
+					//printf ("ProcessImage:Retrieving results from workers\n");
+					for (int i = 0; i < MAX_WORKERS; i++) {
+						//printf ("ProcessImage:Waiting for worker %d...\n", i);
+						c_workers[i] :> val;
+						//printf ("ProcessImage:Done!\n");
+						c_out <: (uchar)(val);
+					}
+				}
+
+				// Give each worker a new pixel
+				for (int i = 0; i < MAX_WORKERS; i++) {
+					// Are we on a boundary?
+					if (pixel_idx == 0 || pixel_idx == (IMWD - 1)) {
+						//printf ("ProcessImage:Boundary pixel\n");
+						boundary = 1;
+					}
+
+					//printf ("ProcessImage:Sending to worker %d...\n", i);
+
+					// Send boundary value
+					c_workers[i] <: boundary;
+
+					// Send pixel value
+					if (!boundary) {
+						// Previous line
+						c_workers[i] <: line[prev_line(line_idx)][pixel_idx-1];
+						c_workers[i] <: line[prev_line(line_idx)][pixel_idx];
+						c_workers[i] <: line[prev_line(line_idx)][pixel_idx+1];
+
+						// Current line
+						c_workers[i] <: line[cur_line(line_idx)][pixel_idx-1];
+						c_workers[i] <: line[cur_line(line_idx)][pixel_idx];
+						c_workers[i] <: line[cur_line(line_idx)][pixel_idx+1];
+
+						// Next line
+						c_workers[i] <: line[line_idx][pixel_idx-1];
+						c_workers[i] <: line[line_idx][pixel_idx];
+						c_workers[i] <: line[line_idx][pixel_idx+1];
+					}
+
+					//printf ("ProcessImage:Done\n");
+
+					// Increment pixel index
+					pixel_idx++;
+				}
+			}
+		}
+
+		// LAST LINE
+		if (y == IMHT-1) {
+			//printf("ProcessImage:Last line...\n");
+			for (int i = 0; i < MAX_WORKERS; i++) {
+				c_workers[i] :> val;
+				c_out <: (uchar)(val);
+
+				// Shutdown the worker threads
+				c_workers[i] <: SHUTDOWN;
 			}
 
-			if (!yboundary && !xboundary) {
-				// Previous row
-				n[0] = img[yoffset - IMWD + x - 1];
-				n[1] = img[yoffset - IMWD + x];
-				n[2] = img[yoffset - IMWD + x + 1];
+			for (int i = 0; i < IMWD; i++)
+				c_out <: (uchar)(BLACK);
 
-				// Current row
-				n[3] = img[yoffset + x - 1];
-				n[4] = img[yoffset + x];
-				n[5] = img[yoffset + x + 1];
-
-				// Next row
-				n[6] = img[yoffset + IMWD + x - 1];
-				n[7] = img[yoffset + IMWD + x];
-				n[8] = img[yoffset + IMWD + x + 1];
-			}
-
-			//printf ("Blurring pixel (%d, %d)\n", y, x);
-			val = blur(n, (xboundary | yboundary));
-			//printf ("Got %d\n", val);
-
-			//Need to cast
-			c_out <: (uchar)(val);
-
-			// Reset boundary flag for next col
-			xboundary = 0;
+			//printf ("ProcessImage:Done\n");
 		}
 
-		// Reset boundary flag for next row
-		yboundary = 0;
-
-		// Increase y-offset
-		yoffset += IMHT;
+		// Increment the line index, in a circular manner
+		line_idx = (line_idx + 1) % LINES_STORED;
 	}
 
-	printf("ProcessImage:Done...\n");
+	printf("ProcessImage:Shutting down...\n");
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -178,13 +237,42 @@ void distributor(chanend c_in, chanend c_out, chanend c_workers[]) {
 /////////////////////////////////////////////////////////////////////////////////////////
 void worker(chanend c_dist) {
 	uchar val;
+	uchar blurred;
 	int boundary;
+	int running = 1;
 
-	c_dist :> val;
+	while (running) {
+		// Receive boundary flag
+		c_dist :> boundary;
 
-	// TODO
+		// Shutdown received?
+		if (boundary == SHUTDOWN) {
+			//printf ("Worker:Received shutdown request.\n");
+			running = 0;
+			break;
+		}
 
-	c_dist <: val;
+		// Initialise blurred with black
+		blurred = BLACK;
+
+		//printf ("Worker:Computing value\n");
+
+		if (!boundary) {
+			for (int i = 0; i < NEIGHBOURS; i++) {
+				c_dist :> val;
+				blurred += val;
+			}
+
+			blurred = blurred / NEIGHBOURS;
+		}
+
+		//printf ("Worker:Writing value (%d) to channel\n", blurred);
+
+		// Return blurred value
+		c_dist <: blurred;
+	}
+
+	printf ("Worker:Shutting down...\n");
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
