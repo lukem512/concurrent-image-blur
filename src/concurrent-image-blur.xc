@@ -13,8 +13,10 @@ typedef unsigned char uchar;
 #include "pgmIO.h"
 
 // Image dimensions
-#define IMHT 256
-#define IMWD 400
+//#define IMHT 256
+#define IMHT 130
+//#define IMWD 400
+#define IMWD 204
 
 // Number of neighbours to blur
 #define NEIGHBOURS 9
@@ -32,7 +34,7 @@ typedef unsigned char uchar;
 #define SHUTDOWN -1
 
 // The input and output filenames
-#define INFNAME "test/BristolCathedral.pgm"
+#define INFNAME "test/BristolCathedralSmall.pgm"
 #define OUTFNAME "test/testout2.pgm"
 //#define INFNAME "O:\\test0.pgm"
 //#define OUTFNAME "O:\\test0.pgm"
@@ -98,6 +100,7 @@ void distributor(chanend c_in, chanend c_out, chanend c_workers[]) {
 	int boundary;
 	int line_idx = 0;
 	int pixel_idx = 0;
+	int workers_in_use = 0;
 
 	printf("ProcessImage:Start, size = %dx%d\n", IMHT, IMWD);
 
@@ -125,15 +128,13 @@ void distributor(chanend c_in, chanend c_out, chanend c_workers[]) {
 			while (pixel_idx != IMWD) {
 				// Retrieve value from each worker
 				// and send it to output
-				if ( (y > 2) || ((y == 2) && (pixel_idx > 0)) ) {
-					//printf ("ProcessImage:Retrieving results from workers\n");
-					for (int i = 0; i < MAX_WORKERS; i++) {
-						//printf ("ProcessImage:Waiting for worker %d...\n", i);
-						c_workers[i] :> val;
-						//printf ("ProcessImage:Done!\n");
-						c_out <: (uchar)(val);
-					}
+				for (int i = 0; i < workers_in_use; i++) {
+					//printf ("ProcessImage:Waiting for worker %d...\n", i);
+					c_workers[i] :> val;
+					//printf ("ProcessImage:Done!\n");
+					c_out <: (uchar)(val);
 				}
+				workers_in_use = 0;
 
 				// Give each worker a new pixel
 				for (int i = 0; i < MAX_WORKERS; i++) {
@@ -179,8 +180,16 @@ void distributor(chanend c_in, chanend c_out, chanend c_workers[]) {
 
 					//printf ("ProcessImage:Done\n");
 
+					// Increment worker counter
+					workers_in_use++;
+
 					// Increment pixel index
 					pixel_idx++;
+
+					// Break if needed
+					if (pixel_idx == IMWD) {
+						break;
+					}
 				}
 			}
 		}
