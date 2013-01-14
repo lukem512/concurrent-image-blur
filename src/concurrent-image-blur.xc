@@ -10,6 +10,7 @@ typedef unsigned char uchar;
 
 #include <platform.h>
 #include <stdio.h>
+#include "platform.h"
 #include "pgmIO.h"
 
 // Image dimensions
@@ -45,6 +46,8 @@ typedef unsigned char uchar;
 //#define OUTFNAME "O:\\test0.pgm"
 
 // LED ports
+out port cledG = PORT_CLOCKLED_SELG;
+out port cledR = PORT_CLOCKLED_SELR;
 out port ledport[4] = { PORT_CLOCKLED_0, PORT_CLOCKLED_1, PORT_CLOCKLED_2, PORT_CLOCKLED_3 };
 
 // Button port
@@ -68,6 +71,8 @@ void showLED(out port p, chanend c_visualiser) {
 		} else {
 			// Send pattern to LEDs
 			p <: lightUpPattern;
+
+			printf ("Sent!\n");
 		}
 	}
 
@@ -82,8 +87,15 @@ void visualiser(chanend c_collector, chanend c_quadrant[]) {
 	// Compute threshold
 	threshold = (IMWD * IMHT) / 12;
 
+	// Select red LED
+	cledR <: 1;
+
 	// Initialise to all LEDs off
-	// TODO
+	for (int i = 0; i < 4; i++) {
+		c_quadrant[i] <: 0;
+	}
+
+	// Set LED illuminated counter to 0
 	leds = 0;
 
 	counter = 0;
@@ -106,7 +118,21 @@ void visualiser(chanend c_collector, chanend c_quadrant[]) {
 			// Need to illuminate another LED?
 			if (counter == threshold) {
 				// TODO - illuminate another LED
+				if (leds < 3) {
+					printf ("Here!\n");
+					c_quadrant[0] <: 0xF;
+				} else if (leds < 6) {
+					c_quadrant[1] <: 0x1;
+				} else if (leds < 9) {
+					c_quadrant[2] <: 0x1;
+				} else {
+					c_quadrant[3] <: 0x1;
+				}
+
+				// Increment LEDs counter
 				leds++;
+
+				printf ("%d LEDs illuminated!\n", leds);
 
 				// Reset counter
 				counter = 0;
@@ -345,6 +371,7 @@ void distributor(chanend c_in, chanend c_out, chanend c_workers[], chanend c_but
 				c_out <: (uchar)(val);
 
 				// Shutdown the worker threads
+				// TODO - maybe move this to below shutdown?
 				c_workers[i] <: SHUTDOWN;
 			}
 
@@ -367,6 +394,9 @@ void distributor(chanend c_in, chanend c_out, chanend c_workers[], chanend c_but
 			ended = 1;
 		}
 	}
+
+	// Tell collector to shutdown
+	c_out <: (uchar) 0;
 
 	printf("ProcessImage:Shutting down...\n");
 	return;
@@ -433,7 +463,7 @@ void worker(chanend c_dist) {
 /////////////////////////////////////////////////////////////////////////////////////////
 void DataOutStream(char outfname[], chanend c_in, chanend c_visualiser) {
 	int res;
-
+	uchar val;
 	uchar line[IMWD];
 
 	printf("DataOutStream:Start...\n");
@@ -451,11 +481,14 @@ void DataOutStream(char outfname[], chanend c_in, chanend c_visualiser) {
 			c_in :> line[x];
 
 			// Update clock visualisation
-			// TODO
+			c_visualiser <: 1;
 			}
 
 		_writeoutline( line, IMWD );
 	}
+
+	// Wait for shutdown message from distributor
+	c_in :> val;
 
 	// Tell visualiser to shutdown
 	c_visualiser <: SHUTDOWN;
@@ -473,11 +506,12 @@ int main() {
 	chan c_visualiser, c_buttonlistener;
 
 	par {
-		on stdcore[0]: DataInStream(INFNAME, c_inIO);
-		on stdcore[1]: DataOutStream(OUTFNAME, c_outIO, c_visualiser);
+		on stdcore[2]: DataInStream(INFNAME, c_inIO);
+		on stdcore[3]: DataOutStream(OUTFNAME, c_outIO, c_visualiser);
 
-		on stdcore[2]: distributor(c_inIO, c_outIO, c_workers, c_buttonlistener);
-		on stdcore[3]: visualiser(c_visualiser, c_quadrant);
+		on stdcore[1]: distributor(c_inIO, c_outIO, c_workers, c_buttonlistener);
+
+		on stdcore[0]: visualiser(c_visualiser, c_quadrant);
 		on stdcore[0]: buttonListener(buttons, c_buttonlistener);
 
 		// Replication of workers
