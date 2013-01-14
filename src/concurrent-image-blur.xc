@@ -13,8 +13,8 @@ typedef unsigned char uchar;
 #include "pgmIO.h"
 
 // Image dimensions
-#define IMHT 256
-#define IMWD 400
+#define IMHT 16
+#define IMWD 16
 
 // Number of neighbours to blur
 #define NEIGHBOURS 9
@@ -39,8 +39,8 @@ typedef unsigned char uchar;
 #define ButtonD 7
 
 // The input and output filenames
-#define INFNAME "test/BristolCathedral.pgm"
-#define OUTFNAME "test/testout2.pgm"
+#define INFNAME "test/test0.pgm"
+#define OUTFNAME "test/test0out.pgm"
 //#define INFNAME "O:\\test0.pgm"
 //#define OUTFNAME "O:\\test0.pgm"
 
@@ -146,19 +146,10 @@ void buttonListener (in port buttons, chanend c_stream) {
 // Read Image from pgm file with path and name infname[] to channel c_out
 //
 /////////////////////////////////////////////////////////////////////////////////////////
-void DataInStream(char infname[], chanend c_out, chanend c_buttonlistener) {
-	int res, started = 0, buttonValue;
+void DataInStream(char infname[], chanend c_out) {
+	int res;
 	int val;
 	uchar line[IMWD];
-
-	// Wait for button A to be pressed to begin reading
-	while (!started) {
-		c_buttonlistener :> buttonValue;
-
-		if (buttonValue == ButtonA) {
-			started = 1;
-		}
-	}
 
 	printf("DataInStream:Start...\n");
 
@@ -175,20 +166,6 @@ void DataInStream(char infname[], chanend c_out, chanend c_buttonlistener) {
 		for (int x = 0; x < IMWD; x++) {
 			// Send pixel value to distributor
 			c_out <: line[ x ];
-
-			// Shutdown if button C is pressed
-			select {
-				case c_buttonlistener :> buttonValue:
-					if (buttonValue == ButtonC) {
-							// Shutdown thread
-							printf ("DataInStream:Shutting down...\n");
-							return;
-					}
-					break;
-
-				default:
-					break;
-			}
 		}
 	}
 
@@ -228,13 +205,26 @@ int prev_line (int line_idx) {
 // Start your implementation by changing this function to farm out parts of the image...
 //
 /////////////////////////////////////////////////////////////////////////////////////////
-void distributor(chanend c_in, chanend c_out, chanend c_workers[]) {
+void distributor(chanend c_in, chanend c_out, chanend c_workers[], chanend c_buttonlistener) {
 	uchar val;
 	uchar line[LINES_STORED][IMWD];
 	int boundary;
 	int line_idx = 0;
 	int pixel_idx = 0;
 	int workers_in_use = 0;
+	int started = 0;
+	int paused = 0;
+	int x;
+	int buttonValue;
+
+	// Wait for button A to be pressed to begin reading
+	while (!started) {
+		c_buttonlistener :> buttonValue;
+
+		if (buttonValue == ButtonA) {
+			started = 1;
+		}
+	}
 
 	printf("ProcessImage:Start, size = %dx%d\n", IMHT, IMWD);
 
@@ -243,11 +233,25 @@ void distributor(chanend c_in, chanend c_out, chanend c_workers[]) {
 		//printf ("\n\nProcessImage:Line %d\n\n", y);
 
 		// Retrieve each pixel in the line
-		for (int x = 0; x < IMWD; x++) {
-			// TODO - check buttons
+		x = 0;
+		while ( x < IMWD) {
+			// check for pause
+			select {
+				case c_buttonlistener :> buttonValue:
+					if (buttonValue == ButtonB) {
+						paused = !paused;
+					}
+					break;
+
+				default:
+					break;
+			}
 
 			// Receive pixel
-			c_in :> line[line_idx][x];
+			if (!paused) {
+				c_in :> line[line_idx][x];
+				x++;
+			}
 		}
 
 		// FIRST LINE
@@ -376,7 +380,6 @@ void worker(chanend c_dist) {
 
 		// Shutdown received?
 		if (boundary == SHUTDOWN) {
-			printf ("Worker:Received shutdown request.\n");
 			running = 0;
 			break;
 		}
@@ -460,10 +463,10 @@ int main() {
 	chan c_visualiser, c_buttonlistener;
 
 	par {
-		on stdcore[0]: DataInStream(INFNAME, c_inIO, c_buttonlistener);
+		on stdcore[0]: DataInStream(INFNAME, c_inIO);
 		on stdcore[1]: DataOutStream(OUTFNAME, c_outIO, c_visualiser);
 
-		on stdcore[2]: distributor(c_inIO, c_outIO, c_workers);
+		on stdcore[2]: distributor(c_inIO, c_outIO, c_workers, c_buttonlistener);
 		on stdcore[3]: visualiser(c_visualiser, c_quadrant);
 		on stdcore[0]: buttonListener(buttons, c_buttonlistener);
 
