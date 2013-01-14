@@ -213,6 +213,7 @@ void distributor(chanend c_in, chanend c_out, chanend c_workers[], chanend c_but
 	int pixel_idx = 0;
 	int workers_in_use = 0;
 	int started = 0;
+	int ended = 0;
 	int paused = 0;
 	int x;
 	int buttonValue;
@@ -356,6 +357,15 @@ void distributor(chanend c_in, chanend c_out, chanend c_workers[], chanend c_but
 
 		// Increment the line index, in a circular manner
 		line_idx = (line_idx + 1) % LINES_STORED;
+	}
+
+	// Wait for button C to shutdown
+	while (!ended) {
+		c_buttonlistener :> buttonValue;
+
+		if (buttonValue == ButtonC) {
+			ended = 1;
+		}
 	}
 
 	printf("ProcessImage:Shutting down...\n");
