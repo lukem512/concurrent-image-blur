@@ -81,11 +81,8 @@ void showLED(out port p, chanend c_visualiser) {
 }
 
 void visualiser(chanend c_collector, chanend c_quadrant[]) {
-	unsigned int threshold, leds, counter;
+	unsigned int leds;
 	int val, running = 1;
-
-	// Compute threshold
-	threshold = (IMWD * IMHT) / 12;
 
 	// Select red LED
 	cledR <: 1;
@@ -97,8 +94,6 @@ void visualiser(chanend c_collector, chanend c_quadrant[]) {
 
 	// Set LED illuminated counter to 0
 	leds = 0;
-
-	counter = 0;
 	while (running) {
 		// Receive value
 		c_collector :> val;
@@ -112,31 +107,22 @@ void visualiser(chanend c_collector, chanend c_quadrant[]) {
 			// Shutdown thread
 			running = 0;
 		} else {
-			// Increment counter
-			counter++;
-
-			// Need to illuminate another LED?
-			if (counter == threshold) {
-				// TODO - illuminate another LED
-				if (leds < 3) {
-					printf ("Here!\n");
-					c_quadrant[0] <: 0xF;
-				} else if (leds < 6) {
-					c_quadrant[1] <: 0x1;
-				} else if (leds < 9) {
-					c_quadrant[2] <: 0x1;
-				} else {
-					c_quadrant[3] <: 0x1;
-				}
-
-				// Increment LEDs counter
-				leds++;
-
-				printf ("%d LEDs illuminated!\n", leds);
-
-				// Reset counter
-				counter = 0;
+			// TODO - illuminate another LED
+			if (leds < 3) {
+				printf ("Here!\n");
+				c_quadrant[0] <: 0xF;
+			} else if (leds < 6) {
+				c_quadrant[1] <: 0x1;
+			} else if (leds < 9) {
+				c_quadrant[2] <: 0x1;
+			} else {
+				c_quadrant[3] <: 0x1;
 			}
+
+			// Increment LEDs counter
+			leds++;
+
+			printf ("%d LEDs illuminated!\n", leds);
 		}
 	}
 
@@ -463,11 +449,16 @@ void worker(chanend c_dist) {
 /////////////////////////////////////////////////////////////////////////////////////////
 void DataOutStream(char outfname[], chanend c_in, chanend c_visualiser) {
 	int res;
+	unsigned int threshold, counter;
 	uchar val;
 	uchar line[IMWD];
 
 	printf("DataOutStream:Start...\n");
 
+	// Compute threshold for LEDs
+	threshold = (IMWD * IMHT) / 12;
+
+	// Open the output file
 	res = _openoutpgm(outfname, IMWD, IMHT);
 
 	if (res) {
@@ -475,14 +466,24 @@ void DataOutStream(char outfname[], chanend c_in, chanend c_visualiser) {
 		return;
 	}
 
+	// Intialise counter to nothing
+	counter = 0;
+
+	// Retrieve output image pixels
 	for (int y = 0; y < IMHT; y++) {
 		for (int x = 0; x < IMWD; x++) {
 			// Receive pixel from distributor
 			c_in :> line[x];
 
-			// Update clock visualisation
-			c_visualiser <: 1;
+			// Increment counter
+			counter++;
+
+			// Update clock visualisation?
+			if (counter == threshold) {
+				c_visualiser <: 1;
+				counter = 0;
 			}
+		}
 
 		_writeoutline( line, IMWD );
 	}
@@ -493,7 +494,9 @@ void DataOutStream(char outfname[], chanend c_in, chanend c_visualiser) {
 	// Tell visualiser to shutdown
 	c_visualiser <: SHUTDOWN;
 
+	// Close output file
 	_closeoutpgm();
+
 	printf( "DataOutStream:Done...\n" );
 	return;
 }
