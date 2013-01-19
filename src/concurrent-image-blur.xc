@@ -53,6 +53,40 @@ out port ledport[4] = { PORT_CLOCKLED_0, PORT_CLOCKLED_1, PORT_CLOCKLED_2, PORT_
 // Button port
 in port buttons = PORT_BUTTON;
 
+// TODO
+// * LED clock visualisation - first light doesn't light up
+// * change colour for pause
+// * Timer process
+// * CSP
+// * Report
+// * Button C should shut down at any point
+
+/////////////////////////////////////////////////////////////////////////////////////////
+//
+// Keeps track of the total run time of the program in ms
+//
+/////////////////////////////////////////////////////////////////////////////////////////
+/*void clock(chanend c_collector) {
+	unsigned int ms, time;
+	unsigned int millisecond = 100000; // 1ms
+	int running = 1;
+	timer t;
+
+	// get the time
+	t :> time;
+
+	while (running) {
+		time += millisecond;
+		t when timerafter(time) :> time;
+		ms += 1;
+
+		// TODO - check for shutdown
+	}
+
+	printf( "clock:Shutting down...\n" );
+	return;
+}*/
+
 /////////////////////////////////////////////////////////////////////////////////////////
 //
 // Displays an LED pattern in one quadrant of the clock LEDs
@@ -80,17 +114,28 @@ void showLED(out port p, chanend c_visualiser) {
 	return;
 }
 
-void visualiser(chanend c_collector, chanend c_quadrant[]) {
-	unsigned int leds;
-	int val, running = 1;
-
-	// Select red LED
-	cledR <: 1;
-
-	// Initialise to all LEDs off
+void deluminate_leds (chanend c_quadrant[]) {
 	for (int i = 0; i < 4; i++) {
 		c_quadrant[i] <: 0;
 	}
+}
+
+void visualiser(chanend c_collector, chanend c_quadrant[]) {
+	unsigned int leds;
+	int val, running = 1;
+	int lightUpPattern[12];
+
+	// Select red LED
+	cledR <: 0;
+	cledG <: 1;
+
+	// Compute lightUpPattern array
+	for (int i = 0; i < 12; i++) {
+		lightUpPattern[i] = 16<<(i%3);
+	}
+
+	// Initialise to all LEDs off
+	deluminate_leds(c_quadrant);
 
 	// Set LED illuminated counter to 0
 	leds = 0;
@@ -99,6 +144,9 @@ void visualiser(chanend c_collector, chanend c_quadrant[]) {
 		c_collector :> val;
 
 		if (val == SHUTDOWN) {
+			// Turn LEDs off
+			deluminate_leds(c_quadrant);
+
 			// Send to showLED threads
 			for (int i = 0; i < 4; i++) {
 				c_quadrant[i] <: SHUTDOWN;
@@ -108,15 +156,58 @@ void visualiser(chanend c_collector, chanend c_quadrant[]) {
 			running = 0;
 		} else {
 			// TODO - illuminate another LED
-			if (leds < 3) {
-				printf ("Here!\n");
-				c_quadrant[0] <: 0xF;
-			} else if (leds < 6) {
-				c_quadrant[1] <: 0x1;
-			} else if (leds < 9) {
-				c_quadrant[2] <: 0x1;
-			} else {
-				c_quadrant[3] <: 0x1;
+			switch (leds) {
+				case 1:
+					c_quadrant[0] <: lightUpPattern[0];
+				break;
+
+				case 2:
+					c_quadrant[0] <: lightUpPattern[0] + lightUpPattern[1];
+				break;
+
+				case 3:
+					c_quadrant[0] <: lightUpPattern[0] + lightUpPattern[1] + lightUpPattern[2];
+				break;
+
+				case 4:
+					c_quadrant[1] <: lightUpPattern[3];
+				break;
+
+				case 5:
+					c_quadrant[1] <: lightUpPattern[3] + lightUpPattern[4];
+				break;
+
+				case 6:
+					c_quadrant[1] <: lightUpPattern[3] + lightUpPattern[4] + lightUpPattern[5];
+				break;
+
+				case 7:
+					c_quadrant[2] <: lightUpPattern[6];
+				break;
+
+				case 8:
+					c_quadrant[2] <: lightUpPattern[6] + lightUpPattern[7];
+				break;
+
+				case 9:
+					c_quadrant[2] <: lightUpPattern[6] + lightUpPattern[7] + lightUpPattern[8];
+				break;
+
+				case 10:
+					c_quadrant[3] <: lightUpPattern[9];
+				break;
+
+				case 11:
+					c_quadrant[3] <: lightUpPattern[9] + lightUpPattern[10];
+				break;
+
+				case 12:
+					c_quadrant[3] <: lightUpPattern[9] + lightUpPattern[10] + lightUpPattern[11];
+				break;
+
+				default:
+					// Do nothing
+				break;
 			}
 
 			// Increment LEDs counter
@@ -487,6 +578,9 @@ void DataOutStream(char outfname[], chanend c_in, chanend c_visualiser) {
 
 		_writeoutline( line, IMWD );
 	}
+
+	// Send confirmation of completed image to visualiser
+	c_visualiser <: 12;
 
 	// Wait for shutdown message from distributor
 	c_in :> val;
