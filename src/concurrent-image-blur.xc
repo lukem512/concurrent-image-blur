@@ -52,13 +52,13 @@ typedef unsigned char uchar;
 // LED ports
 out port cledG = PORT_CLOCKLED_SELG;
 out port cledR = PORT_CLOCKLED_SELR;
+out port bled 	= PORT_BUTTONLED;
 out port ledport[4] = { PORT_CLOCKLED_0, PORT_CLOCKLED_1, PORT_CLOCKLED_2, PORT_CLOCKLED_3 };
 
 // Button port
 in port buttons = PORT_BUTTON;
 
 // TODO
-// * Button LEDs
 // * Debounce pause!
 // * Timer process
 // * CSP
@@ -120,10 +120,21 @@ void showLED(out port p, chanend c_visualiser) {
 }
 
 // Turn off all clock LEDs
-void deluminate_leds (chanend c_quadrant[]) {
+void deluminate_clock_leds (chanend c_quadrant[]) {
 	for (int i = 0; i < 4; i++) {
 		c_quadrant[i] <: 0;
 	}
+}
+
+// Turn off all button LEDs
+void deluminate_button_leds () {
+	bled <: 0b0000;
+}
+
+// Turn off all LEDs
+void deluminate_leds (chanend c_quadrant[]) {
+	deluminate_clock_leds(c_quadrant);
+	deluminate_button_leds();
 }
 
 // Set the clock LEDs to red
@@ -148,21 +159,30 @@ void visualiser(chanend c_buttonListener, chanend c_collector, chanend c_quadran
 	int val, running = 1, paused = 0, complete = 0;
 	int lightUpPattern[12];
 
-	// Select green LED
-	set_led_colour_green ();
-
 	// Compute lightUpPattern array
 	for (int i = 0; i < 12; i++) {
 		lightUpPattern[i] = 16<<(i%3);
 	}
 
-	// Initialise to all LEDs off
+	// Initialise all LEDs to off
 	deluminate_leds(c_quadrant);
 
-	// TODO - button LEDs
+	// Start and shutdown LEDs
+	bled <: 0b0101;
+
+	// Wait for indication that processing has begun
+	c_buttonListener :> val;
+
+	// Turn off start LED and turn on pause LED
+	bled <: 0b0110;
+
+	// Select green LED
+	set_led_colour_green ();
 
 	// Set LED illuminated counter to 0
 	leds = 0;
+
+	// Run!
 	while (running) {
 		// Receive value
 		select {
@@ -231,6 +251,9 @@ void visualiser(chanend c_buttonListener, chanend c_collector, chanend c_quadran
 
 							// Set flag to indicate completeness
 							complete = 1;
+
+							// Turn off pause LED
+							bled <: 0b0100;
 							break;
 
 						default:
@@ -244,16 +267,14 @@ void visualiser(chanend c_buttonListener, chanend c_collector, chanend c_quadran
 				break;
 
 			case c_buttonListener :> val:
-				if (!complete) {
 					paused = !paused;
 
 					// Set colours appropriately
-					if (paused) {
+					if (paused && !complete) {
 						set_led_colour_red ();
 					} else {
 						set_led_colour_green ();
 					}
-				}
 				break;
 		}
 	}
@@ -269,7 +290,7 @@ void visualiser(chanend c_buttonListener, chanend c_collector, chanend c_quadran
 /////////////////////////////////////////////////////////////////////////////////////////
 void buttonListener (in port buttons, chanend c_visualiser, chanend c_distributor) {
 	int buttonInput;
-	int running = 1;
+	int running = 1, started = 0;
 
 	while (running) {
 		buttons when pinsneq(15) :> buttonInput;
@@ -278,14 +299,31 @@ void buttonListener (in port buttons, chanend c_visualiser, chanend c_distributo
 
 		// act on input?
 		switch (buttonInput) {
+			case ButtonA:
+				// Inform visualiser
+				if (!started) {
+					c_visualiser <: 1;
+				}
+
+				// Set started flag
+				started = 1;
+				break;
+
 			case ButtonB:
-				// let visualiser change LED colour
-				c_visualiser <: 1;
+				if (started) {
+					// let visualiser change LED colour
+					c_visualiser <: 1;
+				}
 				break;
 
 			case ButtonC:
 				// shutdown!
 				running = 0;
+
+				// tell visualuser to begin, so it can receive shutdown
+				if (!started) {
+					c_visualiser <: 1;
+				}
 				break;
 
 			default:
