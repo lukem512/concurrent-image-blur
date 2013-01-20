@@ -14,6 +14,8 @@ typedef unsigned char uchar;
 #include "pgmIO.h"
 
 // Image dimensions
+//#define IMHT 256
+//#define IMWD 400
 #define IMHT 16
 #define IMWD 16
 
@@ -42,6 +44,8 @@ typedef unsigned char uchar;
 // The input and output filenames
 #define INFNAME "test/test0.pgm"
 #define OUTFNAME "test/test0out.pgm"
+//#define INFNAME "test/BristolCathedral.pgm"
+//#define OUTFNAME "test/BristolCathedralout.pgm"
 //#define INFNAME "O:\\test0.pgm"
 //#define OUTFNAME "O:\\test0.pgm"
 
@@ -54,8 +58,10 @@ out port ledport[4] = { PORT_CLOCKLED_0, PORT_CLOCKLED_1, PORT_CLOCKLED_2, PORT_
 in port buttons = PORT_BUTTON;
 
 // TODO
-// * LED clock visualisation - first light doesn't light up
-// * change colour for pause
+// * Button LEDs
+// * LED clock visualisation
+// *  - first LED needs illuminating
+// *  - change colour for pause
 // * Timer process
 // * CSP
 // * Report
@@ -64,6 +70,7 @@ in port buttons = PORT_BUTTON;
 /////////////////////////////////////////////////////////////////////////////////////////
 //
 // Keeps track of the total run time of the program in ms
+// Ref: https://www.xmos.com/node/14806?page=1
 //
 /////////////////////////////////////////////////////////////////////////////////////////
 /*void clock(chanend c_collector) {
@@ -114,20 +121,37 @@ void showLED(out port p, chanend c_visualiser) {
 	return;
 }
 
+// Turn off all clock LEDs
 void deluminate_leds (chanend c_quadrant[]) {
 	for (int i = 0; i < 4; i++) {
 		c_quadrant[i] <: 0;
 	}
 }
 
+// Set the clock LEDs to red
+void set_led_colour_red () {
+	cledG <: 0;
+	cledR <: 1;
+}
+
+// Set the clock LEDs to green
+void set_led_colour_green () {
+	cledR <: 0;
+	cledG <: 1;
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////
+//
+// Updates the LEDs on the clock and for the buttons
+//
+/////////////////////////////////////////////////////////////////////////////////////////
 void visualiser(chanend c_collector, chanend c_quadrant[]) {
 	unsigned int leds;
 	int val, running = 1;
 	int lightUpPattern[12];
 
-	// Select red LED
-	cledR <: 0;
-	cledG <: 1;
+	// Select green LED
+	set_led_colour_green ();
 
 	// Compute lightUpPattern array
 	for (int i = 0; i < 12; i++) {
@@ -136,6 +160,8 @@ void visualiser(chanend c_collector, chanend c_quadrant[]) {
 
 	// Initialise to all LEDs off
 	deluminate_leds(c_quadrant);
+
+	// TODO - button LEDs
 
 	// Set LED illuminated counter to 0
 	leds = 0;
@@ -155,59 +181,59 @@ void visualiser(chanend c_collector, chanend c_quadrant[]) {
 			// Shutdown thread
 			running = 0;
 		} else {
-			// TODO - illuminate another LED
+			// illuminate the appropriate number of LEDs
 			switch (leds) {
 				case 1:
 					c_quadrant[0] <: lightUpPattern[0];
-				break;
+					break;
 
 				case 2:
 					c_quadrant[0] <: lightUpPattern[0] + lightUpPattern[1];
-				break;
+					break;
 
 				case 3:
 					c_quadrant[0] <: lightUpPattern[0] + lightUpPattern[1] + lightUpPattern[2];
-				break;
+					break;
 
 				case 4:
 					c_quadrant[1] <: lightUpPattern[3];
-				break;
+					break;
 
 				case 5:
 					c_quadrant[1] <: lightUpPattern[3] + lightUpPattern[4];
-				break;
+					break;
 
 				case 6:
 					c_quadrant[1] <: lightUpPattern[3] + lightUpPattern[4] + lightUpPattern[5];
-				break;
+					break;
 
 				case 7:
 					c_quadrant[2] <: lightUpPattern[6];
-				break;
+					break;
 
 				case 8:
 					c_quadrant[2] <: lightUpPattern[6] + lightUpPattern[7];
-				break;
+					break;
 
 				case 9:
 					c_quadrant[2] <: lightUpPattern[6] + lightUpPattern[7] + lightUpPattern[8];
-				break;
+					break;
 
 				case 10:
 					c_quadrant[3] <: lightUpPattern[9];
-				break;
+					break;
 
 				case 11:
 					c_quadrant[3] <: lightUpPattern[9] + lightUpPattern[10];
-				break;
+					break;
 
 				case 12:
 					c_quadrant[3] <: lightUpPattern[9] + lightUpPattern[10] + lightUpPattern[11];
-				break;
+					break;
 
 				default:
 					// Do nothing
-				break;
+					break;
 			}
 
 			// Increment LEDs counter
@@ -226,17 +252,27 @@ void visualiser(chanend c_collector, chanend c_quadrant[]) {
 // Handles button presses
 //
 /////////////////////////////////////////////////////////////////////////////////////////
-void buttonListener (in port buttons, chanend c_stream) {
+void buttonListener (in port buttons, chanend c_distributor) {
 	int buttonInput;
 	int running = 1;
 
 	while (running) {
 		buttons when pinsneq(15) :> buttonInput;
 
-		c_stream <: buttonInput;
+		c_distributor <: buttonInput;
 
-		if (buttonInput == ButtonC) {
-			running = 0;
+		// act on input?
+		switch (buttonInput) {
+			case ButtonB:
+				// TODO - change LED colour
+				break;
+
+			case ButtonC:
+				running = 0;
+				break;
+
+			default:
+				break;
 		}
 	}
 
@@ -362,6 +398,7 @@ void distributor(chanend c_in, chanend c_out, chanend c_workers[], chanend c_but
 		if (y == 0) {
 			//printf ("ProcessImage:First line...\n");
 			for (int i = 0; i < IMWD; i++) {
+				c_out <: 0;
 				c_out <: (uchar)(BLACK);
 			}
 			//printf ("ProcessImage:Done!\n");
@@ -378,6 +415,7 @@ void distributor(chanend c_in, chanend c_out, chanend c_workers[], chanend c_but
 					//printf ("ProcessImage:Waiting for worker %d...\n", i);
 					c_workers[i] :> val;
 					//printf ("ProcessImage:Done!\n");
+					c_out <: 0;
 					c_out <: (uchar)(val);
 				}
 				workers_in_use = 0;
@@ -445,6 +483,7 @@ void distributor(chanend c_in, chanend c_out, chanend c_workers[], chanend c_but
 			//printf("ProcessImage:Last line...\n");
 			for (int i = 0; i < workers_in_use; i++) {
 				c_workers[i] :> val;
+				c_out <: 0;
 				c_out <: (uchar)(val);
 
 				// Shutdown the worker threads
@@ -453,6 +492,7 @@ void distributor(chanend c_in, chanend c_out, chanend c_workers[], chanend c_but
 			}
 
 			for (int i = 0; i < IMWD; i++) {
+				c_out <: 0;
 				c_out <: (uchar)(BLACK);
 			}
 
@@ -473,7 +513,7 @@ void distributor(chanend c_in, chanend c_out, chanend c_workers[], chanend c_but
 	}
 
 	// Tell collector to shutdown
-	c_out <: (uchar) 0;
+	c_out <: 1;
 
 	printf("ProcessImage:Shutting down...\n");
 	return;
@@ -533,38 +573,30 @@ void worker(chanend c_dist) {
 	return;
 }
 
-/////////////////////////////////////////////////////////////////////////////////////////
-//
-// Write pixel stream from channel c_in to pgm image file
-//
-/////////////////////////////////////////////////////////////////////////////////////////
-void DataOutStream(char outfname[], chanend c_in, chanend c_visualiser) {
-	int res;
+void collector (chanend c_in, chanend c_out, chanend c_visualiser) {
+	int running, shutdown;
 	unsigned int threshold, counter;
 	uchar val;
-	uchar line[IMWD];
-
-	printf("DataOutStream:Start...\n");
 
 	// Compute threshold for LEDs
 	threshold = (IMWD * IMHT) / 12;
 
-	// Open the output file
-	res = _openoutpgm(outfname, IMWD, IMHT);
-
-	if (res) {
-		printf("DataOutStream:Error opening %s\n.", outfname);
-		return;
-	}
-
 	// Intialise counter to nothing
 	counter = 0;
 
-	// Retrieve output image pixels
-	for (int y = 0; y < IMHT; y++) {
-		for (int x = 0; x < IMWD; x++) {
-			// Receive pixel from distributor
-			c_in :> line[x];
+	// Receive worker data
+	running = 1;
+	shutdown = 0;
+	while (running) {
+		// Shutdown?
+		c_in :> shutdown;
+
+		if (shutdown) {
+			// Set shutdown flag
+			running = 0;
+		} else {
+			// Receive pixel value
+			c_in :> val;
 
 			// Increment counter
 			counter++;
@@ -574,19 +606,63 @@ void DataOutStream(char outfname[], chanend c_in, chanend c_visualiser) {
 				c_visualiser <: 1;
 				counter = 0;
 			}
-		}
 
-		_writeoutline( line, IMWD );
+			c_out <: 0;
+			c_out <: val;
+		}
 	}
 
-	// Send confirmation of completed image to visualiser
-	c_visualiser <: 12;
-
-	// Wait for shutdown message from distributor
-	c_in :> val;
-
-	// Tell visualiser to shutdown
+	// Tell visualiser to terminate
 	c_visualiser <: SHUTDOWN;
+
+	printf ("Collector:Shutting down...\n");
+	return;
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////
+//
+// Write pixel stream from channel c_in to pgm image file
+//
+/////////////////////////////////////////////////////////////////////////////////////////
+void DataOutStream(char outfname[], chanend c_in) {
+	int res, shutdown;
+	uchar val;
+	uchar line[IMWD];
+
+	printf("DataOutStream:Start...\n");
+
+	// Open the output file
+	res = _openoutpgm(outfname, IMWD, IMHT);
+
+	if (res) {
+		printf("DataOutStream:Error opening %s\n.", outfname);
+		return;
+	}
+
+	// Retrieve output image pixels
+	shutdown = 0;
+	for (int y = 0; y < IMHT; y++) {
+		for (int x = 0; x < IMWD; x++) {
+			// Receive pixel from distributor
+			c_in :> shutdown;
+			c_in :> val;
+
+			// Check for shutdown message
+			if (shutdown) {
+				break;
+			} else {
+				line[x] = val;
+			}
+		}
+
+		// Shutdown?
+		if (shutdown) {
+			break;
+		}
+
+		// Write the line to file
+		_writeoutline( line, IMWD );
+	}
 
 	// Close output file
 	_closeoutpgm();
@@ -597,16 +673,16 @@ void DataOutStream(char outfname[], chanend c_in, chanend c_visualiser) {
 
 //MAIN PROCESS defining channels, orchestrating and starting the threads
 int main() {
-	chan c_inIO, c_outIO; //extend your channel definitions here
+	chan c_inIO, c_outIO, c_collectIO;
 	chan c_workers[MAX_WORKERS];
 	chan c_quadrant[4];
 	chan c_visualiser, c_buttonlistener;
 
 	par {
 		on stdcore[2]: DataInStream(INFNAME, c_inIO);
-		on stdcore[3]: DataOutStream(OUTFNAME, c_outIO, c_visualiser);
-
-		on stdcore[1]: distributor(c_inIO, c_outIO, c_workers, c_buttonlistener);
+		on stdcore[1]: distributor(c_inIO, c_collectIO, c_workers, c_buttonlistener);
+		on stdcore[2]: collector(c_collectIO, c_outIO, c_visualiser);
+		on stdcore[3]: DataOutStream(OUTFNAME, c_outIO);
 
 		on stdcore[0]: visualiser(c_visualiser, c_quadrant);
 		on stdcore[0]: buttonListener(buttons, c_buttonlistener);
