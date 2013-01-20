@@ -59,9 +59,7 @@ in port buttons = PORT_BUTTON;
 
 // TODO
 // * Button LEDs
-// * LED clock visualisation
-// *  - first LED needs illuminating
-// *  - change colour for pause
+// * Debounce pause!
 // * Timer process
 // * CSP
 // * Report
@@ -145,9 +143,9 @@ void set_led_colour_green () {
 // Updates the LEDs on the clock and for the buttons
 //
 /////////////////////////////////////////////////////////////////////////////////////////
-void visualiser(chanend c_collector, chanend c_quadrant[]) {
+void visualiser(chanend c_buttonListener, chanend c_collector, chanend c_quadrant[]) {
 	unsigned int leds;
-	int val, running = 1;
+	int val, running = 1, paused = 0, complete = 0;
 	int lightUpPattern[12];
 
 	// Select green LED
@@ -167,79 +165,96 @@ void visualiser(chanend c_collector, chanend c_quadrant[]) {
 	leds = 0;
 	while (running) {
 		// Receive value
-		c_collector :> val;
+		select {
+			case c_collector :> val:
 
-		if (val == SHUTDOWN) {
-			// Turn LEDs off
-			deluminate_leds(c_quadrant);
+				if (val == SHUTDOWN) {
+					// Turn LEDs off
+					deluminate_leds(c_quadrant);
 
-			// Send to showLED threads
-			for (int i = 0; i < 4; i++) {
-				c_quadrant[i] <: SHUTDOWN;
-			}
+					// Send to showLED threads
+					for (int i = 0; i < 4; i++) {
+						c_quadrant[i] <: SHUTDOWN;
+					}
 
-			// Shutdown thread
-			running = 0;
-		} else {
-			// illuminate the appropriate number of LEDs
-			switch (leds) {
-				case 1:
-					c_quadrant[0] <: lightUpPattern[0];
-					break;
+					// Shutdown thread
+					running = 0;
+				} else {
+					// illuminate the appropriate number of LEDs
+					switch (leds) {
+						case 1:
+							c_quadrant[0] <: lightUpPattern[0];
+							break;
 
-				case 2:
-					c_quadrant[0] <: lightUpPattern[0] + lightUpPattern[1];
-					break;
+						case 2:
+							c_quadrant[0] <: lightUpPattern[0] + lightUpPattern[1];
+							break;
 
-				case 3:
-					c_quadrant[0] <: lightUpPattern[0] + lightUpPattern[1] + lightUpPattern[2];
-					break;
+						case 3:
+							c_quadrant[0] <: lightUpPattern[0] + lightUpPattern[1] + lightUpPattern[2];
+							break;
 
-				case 4:
-					c_quadrant[1] <: lightUpPattern[3];
-					break;
+						case 4:
+							c_quadrant[1] <: lightUpPattern[3];
+							break;
 
-				case 5:
-					c_quadrant[1] <: lightUpPattern[3] + lightUpPattern[4];
-					break;
+						case 5:
+							c_quadrant[1] <: lightUpPattern[3] + lightUpPattern[4];
+							break;
 
-				case 6:
-					c_quadrant[1] <: lightUpPattern[3] + lightUpPattern[4] + lightUpPattern[5];
-					break;
+						case 6:
+							c_quadrant[1] <: lightUpPattern[3] + lightUpPattern[4] + lightUpPattern[5];
+							break;
 
-				case 7:
-					c_quadrant[2] <: lightUpPattern[6];
-					break;
+						case 7:
+							c_quadrant[2] <: lightUpPattern[6];
+							break;
 
-				case 8:
-					c_quadrant[2] <: lightUpPattern[6] + lightUpPattern[7];
-					break;
+						case 8:
+							c_quadrant[2] <: lightUpPattern[6] + lightUpPattern[7];
+							break;
 
-				case 9:
-					c_quadrant[2] <: lightUpPattern[6] + lightUpPattern[7] + lightUpPattern[8];
-					break;
+						case 9:
+							c_quadrant[2] <: lightUpPattern[6] + lightUpPattern[7] + lightUpPattern[8];
+							break;
 
-				case 10:
-					c_quadrant[3] <: lightUpPattern[9];
-					break;
+						case 10:
+							c_quadrant[3] <: lightUpPattern[9];
+							break;
 
-				case 11:
-					c_quadrant[3] <: lightUpPattern[9] + lightUpPattern[10];
-					break;
+						case 11:
+							c_quadrant[3] <: lightUpPattern[9] + lightUpPattern[10];
+							break;
 
-				case 12:
-					c_quadrant[3] <: lightUpPattern[9] + lightUpPattern[10] + lightUpPattern[11];
-					break;
+						case 12:
+							c_quadrant[3] <: lightUpPattern[9] + lightUpPattern[10] + lightUpPattern[11];
 
-				default:
-					// Do nothing
-					break;
-			}
+							// Set flag to indicate completeness
+							complete = 1;
+							break;
 
-			// Increment LEDs counter
-			leds++;
+						default:
+							// Do nothing
+							break;
+					}
 
-			printf ("%d LEDs illuminated!\n", leds);
+					// Increment LEDs counter
+					leds++;
+				}
+				break;
+
+			case c_buttonListener :> val:
+				if (!complete) {
+					paused = !paused;
+
+					// Set colours appropriately
+					if (paused) {
+						set_led_colour_red ();
+					} else {
+						set_led_colour_green ();
+					}
+				}
+				break;
 		}
 	}
 
@@ -252,7 +267,7 @@ void visualiser(chanend c_collector, chanend c_quadrant[]) {
 // Handles button presses
 //
 /////////////////////////////////////////////////////////////////////////////////////////
-void buttonListener (in port buttons, chanend c_distributor) {
+void buttonListener (in port buttons, chanend c_visualiser, chanend c_distributor) {
 	int buttonInput;
 	int running = 1;
 
@@ -264,10 +279,12 @@ void buttonListener (in port buttons, chanend c_distributor) {
 		// act on input?
 		switch (buttonInput) {
 			case ButtonB:
-				// TODO - change LED colour
+				// let visualiser change LED colour
+				c_visualiser <: 1;
 				break;
 
 			case ButtonC:
+				// shutdown!
 				running = 0;
 				break;
 
@@ -584,6 +601,9 @@ void collector (chanend c_in, chanend c_out, chanend c_visualiser) {
 	// Intialise counter to nothing
 	counter = 0;
 
+	// Send first visualiser message
+	c_visualiser <: 1;
+
 	// Receive worker data
 	running = 1;
 	shutdown = 0;
@@ -676,7 +696,7 @@ int main() {
 	chan c_inIO, c_outIO, c_collectIO;
 	chan c_workers[MAX_WORKERS];
 	chan c_quadrant[4];
-	chan c_visualiser, c_buttonlistener;
+	chan c_visualiser, c_buttonlistener, c_visualiserListener;
 
 	par {
 		on stdcore[2]: DataInStream(INFNAME, c_inIO);
@@ -684,8 +704,8 @@ int main() {
 		on stdcore[2]: collector(c_collectIO, c_outIO, c_visualiser);
 		on stdcore[3]: DataOutStream(OUTFNAME, c_outIO);
 
-		on stdcore[0]: visualiser(c_visualiser, c_quadrant);
-		on stdcore[0]: buttonListener(buttons, c_buttonlistener);
+		on stdcore[0]: visualiser(c_visualiserListener, c_visualiser, c_quadrant);
+		on stdcore[0]: buttonListener(buttons, c_visualiserListener, c_buttonlistener);
 
 		// Replication of workers
 		par (int k=0;k<MAX_WORKERS;k++) {
