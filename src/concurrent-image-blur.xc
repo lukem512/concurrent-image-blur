@@ -2,8 +2,9 @@
 //
 // COMS20600 - WEEKS 9 to 12
 // ASSIGNMENT 3
-// CODE SKELETON
+// CODE SKELETON WITH EXTENSIONS
 // TITLE: "Concurrent Image Filter"
+// AUTHORS: Luke Mitchell <lm0466> and Joe Bligh
 //
 /////////////////////////////////////////////////////////////////////////////////////////
 typedef unsigned char uchar;
@@ -59,11 +60,11 @@ out port ledport[4] = { PORT_CLOCKLED_0, PORT_CLOCKLED_1, PORT_CLOCKLED_2, PORT_
 in port buttons = PORT_BUTTON;
 
 // TODO
-// * Debounce pause!
 // * Timer process
 // * CSP
 // * Report
 // * Button C should shut down at any point
+// * Debounce pause!
 
 /////////////////////////////////////////////////////////////////////////////////////////
 //
@@ -110,8 +111,6 @@ void showLED(out port p, chanend c_visualiser) {
 		} else {
 			// Send pattern to LEDs
 			p <: lightUpPattern;
-
-			printf ("Sent!\n");
 		}
 	}
 
@@ -364,7 +363,7 @@ void DataInStream(char infname[], chanend c_out) {
 	}
 
 	_closeinpgm();
-	printf( "DataInStream:Done...\n" );
+	printf( "DataInStream:Shutting down...\n" );
 	return;
 }
 
@@ -425,8 +424,6 @@ void distributor(chanend c_in, chanend c_out, chanend c_workers[], chanend c_but
 
 	// For every line in the image
 	for (int y = 0; y < IMHT; y++) {
-		//printf ("\n\nProcessImage:Line %d\n\n", y);
-
 		// Retrieve each pixel in the line
 		x = 0;
 		while ( x < IMWD) {
@@ -451,12 +448,10 @@ void distributor(chanend c_in, chanend c_out, chanend c_workers[], chanend c_but
 
 		// FIRST LINE
 		if (y == 0) {
-			//printf ("ProcessImage:First line...\n");
 			for (int i = 0; i < IMWD; i++) {
 				c_out <: 0;
 				c_out <: (uchar)(BLACK);
 			}
-			//printf ("ProcessImage:Done!\n");
 		}
 
 		// SUBSEQUENT LINES
@@ -467,9 +462,7 @@ void distributor(chanend c_in, chanend c_out, chanend c_workers[], chanend c_but
 				// Retrieve value from each worker
 				// and send it to output
 				for (int i = 0; i < workers_in_use; i++) {
-					//printf ("ProcessImage:Waiting for worker %d...\n", i);
 					c_workers[i] :> val;
-					//printf ("ProcessImage:Done!\n");
 					c_out <: 0;
 					c_out <: (uchar)(val);
 				}
@@ -480,44 +473,29 @@ void distributor(chanend c_in, chanend c_out, chanend c_workers[], chanend c_but
 					// Are we on a boundary?
 					boundary = 0;
 					if (pixel_idx == 0 || pixel_idx == (IMWD - 1)) {
-						//printf ("ProcessImage:Boundary pixel\n");
 						boundary = 1;
 					}
 
-					//printf ("ProcessImage:Sending to worker %d...\n", i);
-
 					// Send boundary value
-					//printf ("ProcessImage:Boundary flag\n");
 					c_workers[i] <: boundary;
 
 					// Send pixel value
 					if (!boundary) {
 						// Previous line
-						//printf ("ProcessImage:1\n");
 						c_workers[i] <: line[prev_line(line_idx)][pixel_idx-1];
-						//printf ("ProcessImage:2\n");
 						c_workers[i] <: line[prev_line(line_idx)][pixel_idx];
-						//printf ("ProcessImage:3\n");
 						c_workers[i] <: line[prev_line(line_idx)][pixel_idx+1];
 
 						// Current line
-						//printf ("ProcessImage:4\n");
 						c_workers[i] <: line[cur_line(line_idx)][pixel_idx-1];
-						//printf ("ProcessImage:5\n");
 						c_workers[i] <: line[cur_line(line_idx)][pixel_idx];
-						//printf ("ProcessImage:6\n");
 						c_workers[i] <: line[cur_line(line_idx)][pixel_idx+1];
 
 						// Next line
-						//printf ("ProcessImage:7\n");
 						c_workers[i] <: line[line_idx][pixel_idx-1];
-						//printf ("ProcessImage:8\n");
 						c_workers[i] <: line[line_idx][pixel_idx];
-						//printf ("ProcessImage:9\n");
 						c_workers[i] <: line[line_idx][pixel_idx+1];
 					}
-
-					//printf ("ProcessImage:Done\n");
 
 					// Increment worker counter
 					workers_in_use++;
@@ -550,8 +528,6 @@ void distributor(chanend c_in, chanend c_out, chanend c_workers[], chanend c_but
 				c_out <: 0;
 				c_out <: (uchar)(BLACK);
 			}
-
-			//printf ("ProcessImage:Done\n");
 		}
 
 		// Increment the line index, in a circular manner
@@ -587,7 +563,6 @@ void worker(chanend c_dist) {
 
 	while (running) {
 		// Receive boundary flag
-		//printf ("Worker:Waiting for boundary flag\n");
 		c_dist :> boundary;
 
 		// Shutdown received?
@@ -599,14 +574,9 @@ void worker(chanend c_dist) {
 		// Initialise blurred with black
 		blurred = BLACK;
 
-		//printf ("Worker:Computing value\n");
-
 		if (!boundary) {
-			//printf ("Worker:Not boundary!\n");
 			for (int i = 0; i < NEIGHBOURS; i++) {
-				//printf ("Worker:Waiting for value %d\n", i+1);
 				c_dist :> val;
-				//printf ("Worker:Received value #%d (%d) from channel\n", i+1, val);
 				blurred += val;
 			}
 
@@ -617,8 +587,6 @@ void worker(chanend c_dist) {
 			if (blurred > 255)
 				blurred = 255;
 		}
-
-		//printf ("Worker:Writing value (%d) to channel\n\n", blurred);
 
 		// Return blurred value
 		c_dist <: ((uchar) blurred);
@@ -725,7 +693,7 @@ void DataOutStream(char outfname[], chanend c_in) {
 	// Close output file
 	_closeoutpgm();
 
-	printf( "DataOutStream:Done...\n" );
+	printf( "DataOutStream:Shutting down...\n" );
 	return;
 }
 
