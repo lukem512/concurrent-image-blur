@@ -455,8 +455,17 @@ void distributor(chanend c_in, chanend c_out, chanend c_workers[], chanend c_but
 			// check for pause
 			select {
 				case c_buttonlistener :> buttonValue:
-					if (buttonValue == ButtonB) {
-						paused = !paused;
+					switch (buttonValue) {
+						case ButtonB:
+							paused = !paused;
+							break;
+
+						case ButtonC:
+							// TODO - shutdown
+							break;
+
+						default:
+							break;
 					}
 					break;
 
@@ -538,15 +547,10 @@ void distributor(chanend c_in, chanend c_out, chanend c_workers[], chanend c_but
 
 		// LAST LINE
 		if (y == IMHT-1) {
-			//printf("ProcessImage:Last line...\n");
 			for (int i = 0; i < workers_in_use; i++) {
 				c_workers[i] :> val;
 				c_out <: 0;
 				c_out <: (uchar)(val);
-
-				// Shutdown the worker threads
-				// TODO - maybe move this to below shutdown?
-				c_workers[i] <: SHUTDOWN;
 			}
 
 			for (int i = 0; i < IMWD; i++) {
@@ -566,6 +570,11 @@ void distributor(chanend c_in, chanend c_out, chanend c_workers[], chanend c_but
 		if (buttonValue == ButtonC) {
 			ended = 1;
 		}
+	}
+
+	// Tell workers to shutdown
+	for (int i = 0; i < MAX_WORKERS; i++) {
+		c_workers[i] <: SHUTDOWN;
 	}
 
 	// Tell collector to shutdown
