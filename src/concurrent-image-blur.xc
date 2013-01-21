@@ -176,6 +176,22 @@ void set_led_colour_green () {
 
 /////////////////////////////////////////////////////////////////////////////////////////
 //
+// Turns off LEDs and terminates quadrant processes.
+// To be called from visualiser ONLY.
+//
+/////////////////////////////////////////////////////////////////////////////////////////
+void shutdown_visualiser (chanend c_quadrant[]) {
+	// Turn LEDs off
+		deluminate_leds(c_quadrant);
+
+		// Send to showLED threads
+		for (int i = 0; i < 4; i++) {
+			c_quadrant[i] <: SHUTDOWN;
+		}
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////
+//
 // Updates the LEDs on the clock and for the buttons
 //
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -198,10 +214,14 @@ void visualiser(chanend c_buttonListener, chanend c_collector, chanend c_quadran
 	// Wait for indication that processing has begun
 	c_buttonListener :> val;
 
-	// TODO - check for shutdown!
-
-	// Turn off start LED and turn on pause LED
-	bled <: 0b0110;
+	// check for shutdown!
+	if (val == SHUTDOWN) {
+		shutdown_visualiser (c_quadrant);
+		running = 0;
+	} else {
+		// Turn off start LED and turn on pause LED
+		bled <: 0b0110;
+	}
 
 	// Select green LED
 	set_led_colour_green ();
@@ -216,18 +236,11 @@ void visualiser(chanend c_buttonListener, chanend c_collector, chanend c_quadran
 			case c_collector :> val:
 
 				if (val == SHUTDOWN) {
-					// Turn LEDs off
-					deluminate_leds(c_quadrant);
-
-					// Send to showLED threads
-					for (int i = 0; i < 4; i++) {
-						c_quadrant[i] <: SHUTDOWN;
-					}
-
-					// Shutdown thread
+					// Shutdown thread(s)
+					shutdown_visualiser (c_quadrant);
 					running = 0;
 				} else {
-					// illuminate the appropriate number of LEDs
+					// Illuminate the appropriate number of LEDs
 					switch (leds) {
 						case 1:
 							c_quadrant[0] <: lightUpPattern[0];
@@ -345,7 +358,7 @@ void buttonListener (in port buttons, chanend c_visualiser, chanend c_distributo
 
 				// tell visualuser to begin, so it can receive shutdown
 				if (!started) {
-					c_visualiser <: 1;
+					c_visualiser <: SHUTDOWN;
 				}
 				break;
 		}
@@ -365,25 +378,33 @@ void DataInStream(char infname[], chanend c_out) {
 	int val;
 	uchar line[IMWD];
 
-	printf("DataInStream:Start...\n");
+	// wait for start message from distributor
+	c_out :> val;
 
-	res = _openinpgm(infname, IMWD, IMHT);
+	if (val != SHUTDOWN) {
+		printf("DataInStream:Start...\n");
 
-	if (res) {
-		printf("DataInStream:Error opening %s\n.", infname);
-		return;
-	}
+		res = _openinpgm(infname, IMWD, IMHT);
 
-	for (int y = 0; y < IMHT; y++) {
-		_readinline(line, IMWD);
-
-		for (int x = 0; x < IMWD; x++) {
-			// Send pixel value to distributor
-			c_out <: line[ x ];
+		if (res) {
+			printf("DataInStream:Error opening %s\n.", infname);
+			return;
 		}
+
+		for (int y = 0; y < IMHT; y++) {
+			_readinline(line, IMWD);
+
+			for (int x = 0; x < IMWD; x++) {
+				// Send pixel value to distributor
+				c_out <: line[ x ];
+
+				// TODO - check for shutdown
+			}
+		}
+
+		_closeinpgm();
 	}
 
-	_closeinpgm();
 	printf( "DataInStream:Shutting down...\n" );
 	return;
 }
@@ -439,11 +460,17 @@ void distributor(chanend c_in, chanend c_out, chanend c_workers[], chanend c_but
 		switch (buttonValue) {
 			case ButtonA:
 				started = 1;
+
+				// Send start message to DataInStream
+				c_in <: 1;
 				break;
 
 			case ButtonC:
 				started = 1;
 				ended = 1;
+
+				// Send shutdown message to DataInStream
+				c_in <: SHUTDOWN;
 				break;
 		}
 	}
@@ -695,6 +722,9 @@ void collector (chanend c_in, chanend c_out, chanend c_visualiser) {
 	// Tell visualiser to terminate
 	c_visualiser <: SHUTDOWN;
 
+	// Tell DataOutStream to terminate
+	c_out <: 1;
+
 	printf ("Collector:Shutting down...\n");
 	return;
 }
@@ -723,14 +753,15 @@ void DataOutStream(char outfname[], chanend c_in) {
 	shutdown = 0;
 	for (int y = 0; y < IMHT; y++) {
 		for (int x = 0; x < IMWD; x++) {
-			// Receive pixel from distributor
+			// Shutdown?
 			c_in :> shutdown;
-			c_in :> val;
 
 			// Check for shutdown message
 			if (shutdown) {
 				break;
 			} else {
+				// Receive pixel from distributor
+				c_in :> val;
 				line[x] = val;
 			}
 		}
