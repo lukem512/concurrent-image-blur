@@ -64,6 +64,7 @@ in port buttons = PORT_BUTTON;
 // * CSP
 // * Report
 // * Button C should shut down at any point
+// * 	- shut down data streams
 // * Debounce pause!
 
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -197,6 +198,8 @@ void visualiser(chanend c_buttonListener, chanend c_collector, chanend c_quadran
 	// Wait for indication that processing has begun
 	c_buttonListener :> val;
 
+	// TODO - check for shutdown!
+
 	// Turn off start LED and turn on pause LED
 	bled <: 0b0110;
 
@@ -279,10 +282,6 @@ void visualiser(chanend c_buttonListener, chanend c_collector, chanend c_quadran
 							// Turn off pause LED
 							bled <: 0b0100;
 							break;
-
-						default:
-							// Do nothing
-							break;
 					}
 
 					// Increment LEDs counter
@@ -348,9 +347,6 @@ void buttonListener (in port buttons, chanend c_visualiser, chanend c_distributo
 				if (!started) {
 					c_visualiser <: 1;
 				}
-				break;
-
-			default:
 				break;
 		}
 	}
@@ -440,12 +436,19 @@ void distributor(chanend c_in, chanend c_out, chanend c_workers[], chanend c_but
 	while (!started) {
 		c_buttonlistener :> buttonValue;
 
-		if (buttonValue == ButtonA) {
-			started = 1;
+		switch (buttonValue) {
+			case ButtonA:
+				started = 1;
+				break;
+
+			case ButtonC:
+				started = 1;
+				ended = 1;
+				break;
 		}
 	}
 
-	printf("ProcessImage:Start, size = %dx%d\n", IMHT, IMWD);
+	printf("Distributor:Start, size = %dx%d\n", IMHT, IMWD);
 
 	// For every line in the image
 	for (int y = 0; y < IMHT; y++) {
@@ -461,7 +464,7 @@ void distributor(chanend c_in, chanend c_out, chanend c_workers[], chanend c_but
 							break;
 
 						case ButtonC:
-							// TODO - shutdown
+							ended = 1;
 							break;
 
 						default:
@@ -473,11 +476,22 @@ void distributor(chanend c_in, chanend c_out, chanend c_workers[], chanend c_but
 					break;
 			}
 
+			// Shutdown?
+			if (ended) {
+				break;
+			}
+
 			// Receive pixel
 			if (!paused) {
 				c_in :> line[line_idx][x];
 				x++;
 			}
+		}
+
+		// Shutdown?
+		// TODO - shut down DataInStream
+		if (ended) {
+			break;
 		}
 
 		// FIRST LINE
@@ -552,6 +566,7 @@ void distributor(chanend c_in, chanend c_out, chanend c_workers[], chanend c_but
 				c_out <: 0;
 				c_out <: (uchar)(val);
 			}
+			workers_in_use = 0;
 
 			for (int i = 0; i < IMWD; i++) {
 				c_out <: 0;
@@ -572,6 +587,11 @@ void distributor(chanend c_in, chanend c_out, chanend c_workers[], chanend c_but
 		}
 	}
 
+	// Ensure collection occured
+	for (int i = 0; i < workers_in_use; i++) {
+		c_workers[i] :> val;
+	}
+
 	// Tell workers to shutdown
 	for (int i = 0; i < MAX_WORKERS; i++) {
 		c_workers[i] <: SHUTDOWN;
@@ -580,7 +600,7 @@ void distributor(chanend c_in, chanend c_out, chanend c_workers[], chanend c_but
 	// Tell collector to shutdown
 	c_out <: 1;
 
-	printf("ProcessImage:Shutting down...\n");
+	printf("Distributor:Shutting down...\n");
 	return;
 }
 
