@@ -64,7 +64,7 @@ in port buttons = PORT_BUTTON;
 // * CSP
 // * Report
 // * Button C should shut down at any point
-// * 	- shut down data streams
+// * 	- when Button C is pressed FIRST, distributor, workers, collector, DataOutStream don't shut down
 // * Debounce pause!
 
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -378,7 +378,7 @@ void DataInStream(char infname[], chanend c_out) {
 	int val;
 	uchar line[IMWD];
 
-	// wait for start message from distributor
+	// Wait for start message from distributor
 	c_out :> val;
 
 	if (val != SHUTDOWN) {
@@ -395,10 +395,19 @@ void DataInStream(char infname[], chanend c_out) {
 			_readinline(line, IMWD);
 
 			for (int x = 0; x < IMWD; x++) {
+				// Check for shutdown
+				c_out :> val;
+
+				if (val) {
+					break;
+				}
+
 				// Send pixel value to distributor
 				c_out <: line[ x ];
+			}
 
-				// TODO - check for shutdown
+			if (val) {
+				break;
 			}
 		}
 
@@ -505,18 +514,19 @@ void distributor(chanend c_in, chanend c_out, chanend c_workers[], chanend c_but
 
 			// Shutdown?
 			if (ended) {
+				c_in <: ended;
 				break;
 			}
 
 			// Receive pixel
 			if (!paused) {
+				c_in <: ended;
 				c_in :> line[line_idx][x];
 				x++;
 			}
 		}
 
 		// Shutdown?
-		// TODO - shut down DataInStream
 		if (ended) {
 			break;
 		}
