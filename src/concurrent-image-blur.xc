@@ -63,8 +63,6 @@ in port buttons = PORT_BUTTON;
 // * Timer process
 // * CSP
 // * Report
-// * Button C should shut down at any point
-// * 	- when Button C is pressed FIRST, distributor, workers, collector, DataOutStream don't shut down
 // * Debounce pause!
 
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -398,7 +396,7 @@ void DataInStream(char infname[], chanend c_out) {
 				// Check for shutdown
 				c_out :> val;
 
-				if (val) {
+				if (val == SHUTDOWN) {
 					break;
 				}
 
@@ -477,9 +475,6 @@ void distributor(chanend c_in, chanend c_out, chanend c_workers[], chanend c_but
 			case ButtonC:
 				started = 1;
 				ended = 1;
-
-				// Send shutdown message to DataInStream
-				c_in <: SHUTDOWN;
 				break;
 		}
 	}
@@ -514,7 +509,7 @@ void distributor(chanend c_in, chanend c_out, chanend c_workers[], chanend c_but
 
 			// Shutdown?
 			if (ended) {
-				c_in <: ended;
+				c_in <: SHUTDOWN;
 				break;
 			}
 
