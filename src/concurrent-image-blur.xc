@@ -60,7 +60,6 @@ out port ledport[4] = { PORT_CLOCKLED_0, PORT_CLOCKLED_1, PORT_CLOCKLED_2, PORT_
 in port buttons = PORT_BUTTON;
 
 // TODO
-// * Timer process
 // * CSP
 // * Report
 // * Debounce pause!
@@ -113,7 +112,7 @@ void ticker(chanend c_distributor) {
 		}
 	}
 
-	printf( "clock:Shutting down...\n" );
+	printf( "Ticker:Shutting down...\n" );
 	return;
 }
 
