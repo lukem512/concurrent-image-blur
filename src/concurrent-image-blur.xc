@@ -4,7 +4,8 @@
 // ASSIGNMENT 3
 // CODE SKELETON WITH EXTENSIONS
 // TITLE: "Concurrent Image Filter"
-// AUTHORS: Luke Mitchell <lm0466> and Joe Bligh
+// AUTHORS: Luke Mitchell <lm0466@my.bristol.ac.uk>
+//			and Joe Bligh <jb1996@my.bristol.ac.uk>
 //
 /////////////////////////////////////////////////////////////////////////////////////////
 typedef unsigned char uchar;
@@ -15,10 +16,10 @@ typedef unsigned char uchar;
 #include "pgmIO.h"
 
 // Image dimensions
-//#define IMHT 256
-//#define IMWD 400
-#define IMHT 16
-#define IMWD 16
+#define IMHT 256
+#define IMWD 400
+//#define IMHT 16
+//#define IMWD 16
 
 // Number of neighbours to blur
 #define NEIGHBOURS 9
@@ -43,10 +44,10 @@ typedef unsigned char uchar;
 #define ButtonD 7
 
 // The input and output filenames
-#define INFNAME "test/test0.pgm"
-#define OUTFNAME "test/test0out.pgm"
-//#define INFNAME "test/BristolCathedral.pgm"
-//#define OUTFNAME "test/BristolCathedralout.pgm"
+#define INFNAME "test/BristolCathedral.pgm"
+#define OUTFNAME "test/BristolCathedralout.pgm"
+//#define INFNAME "test/test0.pgm"
+//#define OUTFNAME "test/test0out.pgm"
 //#define INFNAME "O:\\test0.pgm"
 //#define OUTFNAME "O:\\test0.pgm"
 
