@@ -84,7 +84,11 @@ void ticker(chanend c_distributor) {
 		// check for shutdown
 		if (val == SHUTDOWN) {
 			// print time
-			printf ("Ticker:Time elapsed was %dms\n", ms);
+			if (ms == 0) {
+				printf ("Ticker:Timer was terminated before processing began\n");
+			} else {
+				printf ("Ticker:Processing time was %dms\n", ms);
+			}
 
 			// and exit
 			running = 0;
