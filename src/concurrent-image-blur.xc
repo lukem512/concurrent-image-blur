@@ -68,29 +68,54 @@ in port buttons = PORT_BUTTON;
 /////////////////////////////////////////////////////////////////////////////////////////
 //
 // Keeps track of the total run time of the program in ms
+// The timer used is 100MHz, that is, a 10ns period
 // Ref: https://www.xmos.com/node/14806?page=1
 //
 /////////////////////////////////////////////////////////////////////////////////////////
-/*void clock(chanend c_collector) {
-	unsigned int ms, time;
+void ticker(chanend c_distributor) {
+	unsigned int ms = 0, time;
 	unsigned int millisecond = 100000; // 1ms
-	int running = 1;
+	int running = 1, val;
 	timer t;
 
-	// get the time
-	t :> time;
+	// wait for message to begin timing
+	c_distributor :> val;
 
 	while (running) {
-		time += millisecond;
-		t when timerafter(time) :> time;
-		ms += 1;
+		// check for shutdown
+		if (val == SHUTDOWN) {
+			// print time
+			printf ("Ticker:Time elapsed was %dms\n", ms);
 
-		// TODO - check for shutdown
+			// and exit
+			running = 0;
+		} else {
+			// get the time
+			t :> time;
+
+			// add delay
+			time += millisecond;
+
+			// wait for delay to elapse
+			t when timerafter(time) :> void;
+
+			// increment millisecond counter
+			ms += 1;
+
+			// check for messages from distributor
+			select {
+				case c_distributor :> val:
+					break;
+
+				default:
+					break;
+			}
+		}
 	}
 
 	printf( "clock:Shutting down...\n" );
 	return;
-}*/
+}
 
 /////////////////////////////////////////////////////////////////////////////////////////
 //
@@ -447,7 +472,7 @@ int prev_line (int line_idx) {
 // Start your implementation by changing this function to farm out parts of the image...
 //
 /////////////////////////////////////////////////////////////////////////////////////////
-void distributor(chanend c_in, chanend c_out, chanend c_workers[], chanend c_buttonlistener) {
+void distributor(chanend c_in, chanend c_out, chanend c_workers[], chanend c_buttonlistener, chanend c_ticker) {
 	uchar val;
 	uchar line[LINES_STORED][IMWD];
 	int boundary;
@@ -470,6 +495,9 @@ void distributor(chanend c_in, chanend c_out, chanend c_workers[], chanend c_but
 
 				// Send start message to DataInStream
 				c_in <: 1;
+
+				// Tell ticker to begin timing
+				c_ticker <: 1;
 				break;
 
 			case ButtonC:
@@ -609,6 +637,10 @@ void distributor(chanend c_in, chanend c_out, chanend c_workers[], chanend c_but
 		// Increment the line index, in a circular manner
 		line_idx = (line_idx + 1) % LINES_STORED;
 	}
+
+	// Tell ticker to shutdown
+	// This is before the button press, as otherwise that is counted
+	c_ticker <: SHUTDOWN;
 
 	// Wait for button C to shutdown
 	while (!ended) {
@@ -792,13 +824,14 @@ int main() {
 	chan c_inIO, c_outIO, c_collectIO;
 	chan c_workers[MAX_WORKERS];
 	chan c_quadrant[4];
-	chan c_visualiser, c_buttonlistener, c_visualiserListener;
+	chan c_visualiser, c_buttonlistener, c_visualiserListener, c_ticker;
 
 	par {
 		on stdcore[2]: DataInStream(INFNAME, c_inIO);
-		on stdcore[1]: distributor(c_inIO, c_collectIO, c_workers, c_buttonlistener);
+		on stdcore[1]: distributor(c_inIO, c_collectIO, c_workers, c_buttonlistener, c_ticker);
 		on stdcore[2]: collector(c_collectIO, c_outIO, c_visualiser);
 		on stdcore[3]: DataOutStream(OUTFNAME, c_outIO);
+		on stdcore[3]: ticker(c_ticker);
 
 		on stdcore[0]: visualiser(c_visualiserListener, c_visualiser, c_quadrant);
 		on stdcore[0]: buttonListener(buttons, c_visualiserListener, c_buttonlistener);
