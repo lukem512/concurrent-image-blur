@@ -16,6 +16,8 @@ typedef unsigned char uchar;
 #include "pgmIO.h"
 
 // Image dimensions
+//#define IMHT 2091
+//#define IMWD 2121
 #define IMHT 256
 #define IMWD 400
 //#define IMHT 16
@@ -28,7 +30,7 @@ typedef unsigned char uchar;
 #define BLACK 0
 
 // The maximum number of workers to spawn
-#define MAX_WORKERS 16
+#define MAX_WORKERS 1
 
 // The number of lines of the image to store
 #define LINES_STORED 3
@@ -44,6 +46,8 @@ typedef unsigned char uchar;
 #define ButtonD 7
 
 // The input and output filenames
+//#define INFNAME "test/elephant_1.PGM"
+//#define OUTFNAME "test/elephant_1-out.PGM"
 #define INFNAME "test/BristolCathedral.pgm"
 #define OUTFNAME "test/BristolCathedralout.pgm"
 //#define INFNAME "test/test0.pgm"
@@ -61,8 +65,6 @@ out port ledport[4] = { PORT_CLOCKLED_0, PORT_CLOCKLED_1, PORT_CLOCKLED_2, PORT_
 in port buttons = PORT_BUTTON;
 
 // TODO
-// * CSP
-// * Report
 // * Debounce pause!
 
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -73,8 +75,8 @@ in port buttons = PORT_BUTTON;
 //
 /////////////////////////////////////////////////////////////////////////////////////////
 void ticker(chanend c_distributor) {
-	unsigned int ms = 0, time;
-	unsigned int millisecond = 100000; // 1ms
+	unsigned int s = 0, ms = 0, time;
+	unsigned int millisecond = 10000000; // 100ms
 	int running = 1, val;
 	timer t;
 
@@ -85,10 +87,10 @@ void ticker(chanend c_distributor) {
 		// check for shutdown
 		if (val == SHUTDOWN) {
 			// print time
-			if (ms == 0) {
+			if (s == 0 && ms == 0) {
 				printf ("Ticker:Timer was terminated before processing began\n");
 			} else {
-				printf ("Ticker:Processing time was %dms\n", ms);
+				printf ("Ticker:Processing time was %ds and %dms\n", s, ms);
 			}
 
 			// and exit
@@ -104,7 +106,13 @@ void ticker(chanend c_distributor) {
 			t when timerafter(time) :> void;
 
 			// increment millisecond counter
-			ms += 1;
+			ms++;
+
+			// increment second counter ?
+			if ((ms % 10) == 0) {
+				s++;
+				ms = 0;
+			}
 
 			// check for messages from distributor
 			select {
@@ -363,13 +371,13 @@ void buttonListener (in port buttons, chanend c_visualiser, chanend c_distributo
 		// act on input?
 		switch (buttonInput) {
 			case ButtonA:
-				// Inform visualiser
 				if (!started) {
+					// Inform visualiser
 					c_visualiser <: 1;
-				}
 
-				// Set started flag
-				started = 1;
+					// Set started flag
+					started = 1;
+				}
 				break;
 
 			case ButtonB:
@@ -835,10 +843,10 @@ int main() {
 		on stdcore[1]: distributor(c_inIO, c_collectIO, c_workers, c_buttonlistener, c_ticker);
 		on stdcore[2]: collector(c_collectIO, c_outIO, c_visualiser);
 		on stdcore[3]: DataOutStream(OUTFNAME, c_outIO);
-		on stdcore[3]: ticker(c_ticker);
 
 		on stdcore[0]: visualiser(c_visualiserListener, c_visualiser, c_quadrant);
 		on stdcore[0]: buttonListener(buttons, c_visualiserListener, c_buttonlistener);
+		on stdcore[3]: ticker(c_ticker);
 
 		// Replication of workers
 		par (int k=0;k<MAX_WORKERS;k++) {
