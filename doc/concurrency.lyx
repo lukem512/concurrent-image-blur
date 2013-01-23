@@ -24,7 +24,7 @@
 \output_sync 0
 \bibtex_command default
 \index_command default
-\paperfontsize default
+\paperfontsize 10
 \spacing single
 \use_hyperref false
 \papersize default
@@ -77,6 +77,10 @@ Computer Science - G400 - Year 2
 
 \begin_layout Date
 January 20th 2013
+\begin_inset Newpage newpage
+\end_inset
+
+
 \end_layout
 
 \begin_layout Section
@@ -154,7 +158,7 @@ The process communication model for the concurrent filter can be seen in
 \begin_inset Graphics
 	filename /home/luke/xmos/workspace/concurrent-image-blur/doc/objects.png
 	display false
-	width 50page%
+	width 35page%
 
 \end_inset
 
@@ -973,7 +977,7 @@ The number of workers the filter employs seems to have little difference
 \align center
 \begin_inset Graphics
 	filename /home/luke/Pictures/Screenshot from 2013-01-23 10:52:34.png
-	scale 30
+	scale 20
 
 \end_inset
 
