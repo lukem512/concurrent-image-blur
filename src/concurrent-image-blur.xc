@@ -15,13 +15,15 @@ typedef unsigned char uchar;
 #include "platform.h"
 #include "pgmIO.h"
 
+// The input and output filenames
+#define INFNAME "test/test0.pgm"
+#define OUTFNAME "test/test0out.pgm"
+//#define INFNAME "O:\\test0.pgm"
+//#define OUTFNAME "O:\\test0out.pgm"
+
 // Image dimensions
-//#define IMHT 2091
-//#define IMWD 2121
-#define IMHT 256
-#define IMWD 400
-//#define IMHT 16
-//#define IMWD 16
+#define IMHT 16
+#define IMWD 16
 
 // Number of neighbours to blur
 #define NEIGHBOURS 9
@@ -30,8 +32,7 @@ typedef unsigned char uchar;
 #define BLACK 0
 
 // The maximum number of workers to spawn
-#define MAX_WORKERS 1
-
+#define MAX_WORKERS 7
 // The number of lines of the image to store
 #define LINES_STORED 3
 
@@ -45,16 +46,6 @@ typedef unsigned char uchar;
 #define ButtonC 11
 #define ButtonD 7
 
-// The input and output filenames
-//#define INFNAME "test/elephant_1.PGM"
-//#define OUTFNAME "test/elephant_1-out.PGM"
-#define INFNAME "test/BristolCathedral.pgm"
-#define OUTFNAME "test/BristolCathedralout.pgm"
-//#define INFNAME "test/test0.pgm"
-//#define OUTFNAME "test/test0out.pgm"
-//#define INFNAME "O:\\test0.pgm"
-//#define OUTFNAME "O:\\test0.pgm"
-
 // LED ports
 out port cledG = PORT_CLOCKLED_SELG;
 out port cledR = PORT_CLOCKLED_SELR;
@@ -63,9 +54,6 @@ out port ledport[4] = { PORT_CLOCKLED_0, PORT_CLOCKLED_1, PORT_CLOCKLED_2, PORT_
 
 // Button port
 in port buttons = PORT_BUTTON;
-
-// TODO
-// * Debounce pause!
 
 /////////////////////////////////////////////////////////////////////////////////////////
 //
@@ -90,7 +78,7 @@ void ticker(chanend c_distributor) {
 			if (s == 0 && ms == 0) {
 				printf ("Ticker:Timer was terminated before processing began\n");
 			} else {
-				printf ("Ticker:Processing time was %ds and %dms\n", s, ms);
+				printf ("Ticker:Processing time was %d.%ds\n", s, ms);
 			}
 
 			// and exit
@@ -99,7 +87,7 @@ void ticker(chanend c_distributor) {
 			// get the time
 			t :> time;
 
-			// add delay
+			// add delay (100ms)
 			time += millisecond;
 
 			// wait for delay to elapse
