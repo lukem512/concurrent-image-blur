@@ -1,0 +1,1014 @@
+#LyX 2.0 created this file. For more info see http://www.lyx.org/
+\lyxformat 413
+\begin_document
+\begin_header
+\textclass article
+\use_default_options true
+\maintain_unincluded_children false
+\language english
+\language_package default
+\inputencoding auto
+\fontencoding global
+\font_roman default
+\font_sans default
+\font_typewriter default
+\font_default_family default
+\use_non_tex_fonts false
+\font_sc false
+\font_osf false
+\font_sf_scale 100
+\font_tt_scale 100
+
+\graphics default
+\default_output_format default
+\output_sync 0
+\bibtex_command default
+\index_command default
+\paperfontsize default
+\spacing single
+\use_hyperref false
+\papersize default
+\use_geometry true
+\use_amsmath 1
+\use_esint 1
+\use_mhchem 1
+\use_mathdots 1
+\cite_engine basic
+\use_bibtopic false
+\use_indices false
+\paperorientation portrait
+\suppress_date false
+\use_refstyle 1
+\index Index
+\shortcut idx
+\color #008000
+\end_index
+\topmargin 2cm
+\rightmargin 2cm
+\bottommargin 2cm
+\secnumdepth 3
+\tocdepth 3
+\paragraph_separation indent
+\paragraph_indentation default
+\quotes_language english
+\papercolumns 1
+\papersides 1
+\paperpagestyle default
+\tracking_changes false
+\output_changes false
+\html_math_output 0
+\html_css_as_file 0
+\html_be_strict false
+\end_header
+
+\begin_body
+
+\begin_layout Title
+COMS2600 Assignment 3 - Concurrent Image Filter
+\end_layout
+
+\begin_layout Author
+Luke Mitchell <lm0466@my.bristol.ac.uk> and Joe Bligh <jb1996@my.bristol.ac.uk>
+\end_layout
+
+\begin_layout Author
+Computer Science - G400 - Year 2
+\end_layout
+
+\begin_layout Date
+January 20th 2013
+\end_layout
+
+\begin_layout Section
+Functionality and Design
+\end_layout
+
+\begin_layout Subparagraph
+The concurrent filter that we have implemented uses a 'black box' design
+ to contain it from the streaming functions.
+ The filter utilises a distributor, which receives pixel data from the DataInStr
+eam process, multiple workers, the number of which can be altered using
+ the 
+\emph on
+MAX_WORKERS
+\emph default
+ hash-define, and a collector, responsible for updating the visualisation
+ and for writing the pixels to the DataOutStream process.
+ There is also a process, buttonListener, which is responsible for handling
+ button events, and does so by passing messages to the visualiser and the
+ distributor.
+ There is a timer process, ticker, that measures the elapsed processing
+ time in 100 milisecond granularity.
+ The timer has the ability to measure finer granularities than this, but
+ for accuracy, 100ms was chosen to be suitable.
+ One final process, the visualiser, is responsible for updating the clock
+ LEDs to reflect the progress of the filter, and also the button LEDs, to
+ reflect the state of the UI.
+\end_layout
+
+\begin_layout Subparagraph
+The distributor first waits for a message from the button listener, informing
+ it that the start button has been pressed.
+ The distributor then notifies the DataInStream process, which opens the
+ input file and begins to read the image.
+ The distributor also notifies the timer thread to begin timing.
+ The distributor then reads in 3 lines of the image, from DataInStream,
+ and stores those locally.
+ These lines are used to send each worker 9 pixels, 3 from each line, which
+ are averaged and sent back.
+ The work is distributed linearly, so each worker in order is given work,
+ and each has the result read in the same order, before the pixels are sent
+ to the collector.
+ Each time a pixel is read from DataStreamIn the messages from the button
+ listener are checked and acted upon: if the pause button is pressed then
+ the application stops reading the pixels and will halt at that point; if
+ the terminate button is pressed the distributor will shut down the timer,
+ then all the workers in turn and finally the collector.
+\end_layout
+
+\begin_layout Subparagraph
+The workers are simple processes that wait until 9 pixels have been read
+ from the distributor.
+ Each time a value is read, it is added to a running total, in order to
+ save space by storing each of the 9 pixels seperately.
+ The value is then divided by 9 to produce the blurred value, and written
+ back onto the channel, waiting for the distributor to read it.
+\end_layout
+
+\begin_layout Subparagraph
+The collector receives pixels from the distributor, after they have been
+ returned by the workers.
+ It increments a local counter for every pixel it receives, and when this
+ reaches a threshold, one twelth of the image, it illuminates another LED
+ by sending a message to the visualiser.
+ Pixels are passed to DataOutStream for writing to file.
+\end_layout
+
+\begin_layout Subparagraph
+The process communication model for the concurrent filter can be seen in
+ the the diagram below.
+\end_layout
+
+\begin_layout Standard
+\align center
+\begin_inset Graphics
+	filename /home/luke/xmos/workspace/concurrent-image-blur/doc/objects.png
+	display false
+	width 50page%
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subparagraph
+The filter implementation we chose to use allowed images of relatively large
+ dimensions to be blurred.
+ This is due to the application only storing 3 lines of the image at any
+ given time, which it holds in a circular buffer, and thus not filling the
+ memory as the skeleton code, or implementations that require storing the
+ whole image do.
+ The filter has been tested with images of over 2000x2000 pixels and it
+ will blur them successfully.
+ The implementation also has the advantage of not requiring communication
+ between the worker processes.
+ This greatly cuts down communication overheads and simplifies the system.
+ The distribution of data is entirely managed by the distributor process.
+\end_layout
+
+\begin_layout Subparagraph
+The interface to the filter allows the user to explicitly start the image
+ processing, which begins reading and blurring of the image, pausing the
+ processing at any point, causing the clock LEDs to turn red as an indicator,
+ and also termination of the processing.
+ The termination can occur at any point: before processing has begun, during
+ processing, regardless of whether the processing is paused or not, or after
+ the filtered image has been outputted.
+ All processes are terminated gracefully and will print a message to the
+ console to indicate this.
+\end_layout
+
+\begin_layout Subparagraph
+The timer process that has been implemented allows performance of the filter
+ to be measured.
+ The timer begins when the user presses the start button and will output
+ the time taken to process the image, in 100 milisecond precision, to the
+ console, upon completion.
+\end_layout
+
+\begin_layout Subparagraph
+The following CSP describes the interaction between the button listener
+ and the distributor processes.
+ This CSP ignores any other behaviours or interactions within the processes,
+ however the different 'states' that the distributor occupies indicate what
+ is occurring at any point.
+ Items in
+\emph on
+ emphasis
+\emph default
+ are Processes, other items are events.
+ 
+\family roman
+\series medium
+\shape up
+\size normal
+\emph off
+\bar no
+\strikeout off
+\uuline off
+\uwave off
+\noun off
+\color none
+
+\begin_inset Formula $SKIP$
+\end_inset
+
+
+\family default
+\series default
+\shape default
+\size default
+\emph default
+\bar default
+\strikeout default
+\uuline default
+\uwave default
+\noun default
+\color inherit
+ is used to denote successful termination of a process.
+ The button events are taken to mean 
+\begin_inset Quotes eld
+\end_inset
+
+when the specified button is pressed
+\begin_inset Quotes erd
+\end_inset
+
+ for 
+\emph on
+ButtonListener
+\emph default
+ and 
+\begin_inset Quotes eld
+\end_inset
+
+when the message indicating that the specified button has been pressed is
+ received from 
+\emph on
+ButtonListener
+\emph default
+
+\begin_inset Quotes erd
+\end_inset
+
+ for the 
+\emph on
+Distributor
+\emph default
+ processes.
+\end_layout
+
+\begin_layout Standard
+
+\emph on
+\begin_inset VSpace defskip
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\emph on
+ButtonListener
+\family roman
+\series medium
+\shape up
+\size normal
+\emph off
+\bar no
+\strikeout off
+\uuline off
+\uwave off
+\noun off
+\color none
+ =
+\end_layout
+
+\begin_layout Standard
+
+\family roman
+\series medium
+\shape up
+\size normal
+\emph off
+\bar no
+\strikeout off
+\uuline off
+\uwave off
+\noun off
+\color none
+\begin_inset space \qquad{}
+\end_inset
+
+ButtonA → SendToDistributor → 
+\family default
+\series default
+\shape default
+\size default
+\emph on
+\bar default
+\strikeout default
+\uuline default
+\uwave default
+\noun default
+\color inherit
+ButtonListener
+\family roman
+\series medium
+\shape up
+\size normal
+\emph off
+\bar no
+\strikeout off
+\uuline off
+\uwave off
+\noun off
+\color none
+|
+\end_layout
+
+\begin_layout Standard
+
+\family roman
+\series medium
+\shape up
+\size normal
+\emph off
+\bar no
+\strikeout off
+\uuline off
+\uwave off
+\noun off
+\color none
+\begin_inset space \qquad{}
+\end_inset
+
+ButtonB → SendToDistributor → 
+\family default
+\series default
+\shape default
+\size default
+\emph on
+\bar default
+\strikeout default
+\uuline default
+\uwave default
+\noun default
+\color inherit
+ButtonListener
+\family roman
+\series medium
+\shape up
+\size normal
+\emph off
+\bar no
+\strikeout off
+\uuline off
+\uwave off
+\noun off
+\color none
+|
+\end_layout
+
+\begin_layout Standard
+
+\family roman
+\series medium
+\shape up
+\size normal
+\emph off
+\bar no
+\strikeout off
+\uuline off
+\uwave off
+\noun off
+\color none
+\begin_inset space \qquad{}
+\end_inset
+
+ButtonC → SendToDistributor → 
+\family default
+\series default
+\shape default
+\size default
+\emph on
+\bar default
+\strikeout default
+\uuline default
+\uwave default
+\noun default
+\color inherit
+SKIP
+\end_layout
+
+\begin_layout Standard
+
+\emph on
+\begin_inset VSpace defskip
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\emph on
+Distributor
+\family roman
+\series medium
+\shape up
+\size normal
+\emph off
+\bar no
+\strikeout off
+\uuline off
+\uwave off
+\noun off
+\color none
+ =
+\end_layout
+
+\begin_layout Standard
+
+\family roman
+\series medium
+\shape up
+\size normal
+\emph off
+\bar no
+\strikeout off
+\uuline off
+\uwave off
+\noun off
+\color none
+\begin_inset space \qquad{}
+\end_inset
+
+ButtonA → 
+\family default
+\series default
+\shape default
+\size default
+\emph on
+\bar default
+\strikeout default
+\uuline default
+\uwave default
+\noun default
+\color inherit
+DistributorMain
+\family roman
+\series medium
+\shape up
+\size normal
+\emph off
+\bar no
+\strikeout off
+\uuline off
+\uwave off
+\noun off
+\color none
+|
+\end_layout
+
+\begin_layout Standard
+
+\family roman
+\series medium
+\shape up
+\size normal
+\emph off
+\bar no
+\strikeout off
+\uuline off
+\uwave off
+\noun off
+\color none
+\begin_inset space \qquad{}
+\end_inset
+
+ButtonB → 
+\family default
+\series default
+\shape default
+\size default
+\emph on
+\bar default
+\strikeout default
+\uuline default
+\uwave default
+\noun default
+\color inherit
+DistributorMain
+\family roman
+\series medium
+\shape up
+\size normal
+\emph off
+\bar no
+\strikeout off
+\uuline off
+\uwave off
+\noun off
+\color none
+|
+\end_layout
+
+\begin_layout Standard
+
+\family roman
+\series medium
+\shape up
+\size normal
+\emph off
+\bar no
+\strikeout off
+\uuline off
+\uwave off
+\noun off
+\color none
+\begin_inset space \qquad{}
+\end_inset
+
+ButtonC → 
+\family default
+\series default
+\shape default
+\size default
+\emph on
+\bar default
+\strikeout default
+\uuline default
+\uwave default
+\noun default
+\color inherit
+DistributorEnd
+\end_layout
+
+\begin_layout Standard
+
+\emph on
+\begin_inset VSpace defskip
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\emph on
+DistributorMain
+\family roman
+\series medium
+\shape up
+\size normal
+\emph off
+\bar no
+\strikeout off
+\uuline off
+\uwave off
+\noun off
+\color none
+ =
+\end_layout
+
+\begin_layout Standard
+
+\family roman
+\series medium
+\shape up
+\size normal
+\emph off
+\bar no
+\strikeout off
+\uuline off
+\uwave off
+\noun off
+\color none
+\begin_inset space \qquad{}
+\end_inset
+
+ButtonA → 
+\family default
+\series default
+\shape default
+\size default
+\emph on
+\bar default
+\strikeout default
+\uuline default
+\uwave default
+\noun default
+\color inherit
+DistributorMain
+\family roman
+\series medium
+\shape up
+\size normal
+\emph off
+\bar no
+\strikeout off
+\uuline off
+\uwave off
+\noun off
+\color none
+|
+\end_layout
+
+\begin_layout Standard
+
+\family roman
+\series medium
+\shape up
+\size normal
+\emph off
+\bar no
+\strikeout off
+\uuline off
+\uwave off
+\noun off
+\color none
+\begin_inset space \qquad{}
+\end_inset
+
+ButtonB → 
+\family default
+\series default
+\shape default
+\size default
+\emph on
+\bar default
+\strikeout default
+\uuline default
+\uwave default
+\noun default
+\color inherit
+DistributorPaused
+\family roman
+\series medium
+\shape up
+\size normal
+\emph off
+\bar no
+\strikeout off
+\uuline off
+\uwave off
+\noun off
+\color none
+|
+\end_layout
+
+\begin_layout Standard
+
+\family roman
+\series medium
+\shape up
+\size normal
+\emph off
+\bar no
+\strikeout off
+\uuline off
+\uwave off
+\noun off
+\color none
+\begin_inset space \qquad{}
+\end_inset
+
+ButtonC → 
+\family default
+\series default
+\shape default
+\size default
+\emph on
+\bar default
+\strikeout default
+\uuline default
+\uwave default
+\noun default
+\color inherit
+DistributorEnd
+\end_layout
+
+\begin_layout Standard
+
+\emph on
+\begin_inset VSpace defskip
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\emph on
+DistributorPaused
+\family roman
+\series medium
+\shape up
+\size normal
+\emph off
+\bar no
+\strikeout off
+\uuline off
+\uwave off
+\noun off
+\color none
+ =
+\end_layout
+
+\begin_layout Standard
+
+\family roman
+\series medium
+\shape up
+\size normal
+\emph off
+\bar no
+\strikeout off
+\uuline off
+\uwave off
+\noun off
+\color none
+\begin_inset space \qquad{}
+\end_inset
+
+ButtonA → 
+\family default
+\series default
+\shape default
+\size default
+\emph on
+\bar default
+\strikeout default
+\uuline default
+\uwave default
+\noun default
+\color inherit
+DistributorPaused
+\family roman
+\series medium
+\shape up
+\size normal
+\emph off
+\bar no
+\strikeout off
+\uuline off
+\uwave off
+\noun off
+\color none
+|
+\end_layout
+
+\begin_layout Standard
+
+\family roman
+\series medium
+\shape up
+\size normal
+\emph off
+\bar no
+\strikeout off
+\uuline off
+\uwave off
+\noun off
+\color none
+\begin_inset space \qquad{}
+\end_inset
+
+ButtonB → 
+\family default
+\series default
+\shape default
+\size default
+\emph on
+\bar default
+\strikeout default
+\uuline default
+\uwave default
+\noun default
+\color inherit
+DistributorMain
+\family roman
+\series medium
+\shape up
+\size normal
+\emph off
+\bar no
+\strikeout off
+\uuline off
+\uwave off
+\noun off
+\color none
+|
+\end_layout
+
+\begin_layout Standard
+
+\family roman
+\series medium
+\shape up
+\size normal
+\emph off
+\bar no
+\strikeout off
+\uuline off
+\uwave off
+\noun off
+\color none
+\begin_inset space \qquad{}
+\end_inset
+
+ButtonC → 
+\family default
+\series default
+\shape default
+\size default
+\emph on
+\bar default
+\strikeout default
+\uuline default
+\uwave default
+\noun default
+\color inherit
+DistributorEnd
+\end_layout
+
+\begin_layout Standard
+
+\emph on
+\begin_inset VSpace defskip
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\emph on
+DistributorEnd
+\family roman
+\series medium
+\shape up
+\size normal
+\emph off
+\bar no
+\strikeout off
+\uuline off
+\uwave off
+\noun off
+\color none
+ = 
+\family default
+\series default
+\shape default
+\size default
+\emph on
+\bar default
+\strikeout default
+\uuline default
+\uwave default
+\noun default
+\color inherit
+SKIP
+\end_layout
+
+\begin_layout Section
+Tests and Experiments
+\end_layout
+
+\begin_layout Subparagraph
+To test our filter we ran it on a range of images, of varying dimensions,
+ timing the processing.
+ We also ran the filter on a large image and ensured that the interface
+ buttons would work regardless of the order in which they were pressed.
+ We tested the interface by manually pressing the buttons in a variety of
+ orders and by asking our flatmates to 
+\begin_inset Quotes eld
+\end_inset
+
+play
+\begin_inset Quotes erd
+\end_inset
+
+ with the equipment.
+ The number of workers that the filter uses can be easily modified.
+ Tests were run on the Bristol Cathedral image, varying the number of workers
+ from 1 to 20.
+ The time to blur the image was then recorded using the timing process.
+ The timing was done using a computer running Linux, which seems faster
+ than the Windows version of xTime.
+\end_layout
+
+\begin_layout Subparagraph
+The test images can be seen below.
+ The times reported are for 7 worker processes.
+ The larger images have been scaled and do not fully reflect the blur/quality
+ of the full size versions.
+\end_layout
+
+\begin_layout Standard
+\align center
+\begin_inset Graphics
+	filename /home/luke/xmos/workspace/concurrent-image-blur/doc/combined.png
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\align center
+test0.pgm (16x16) - 0.9s, BristolCathedral.pgm (400x256) - 164s, elephant_2.pgm
+ (1280x853) - 1794s, giraffe_tall.pgm (364x765) - 506s
+\end_layout
+
+\begin_layout Section
+Critical Analysis
+\end_layout
+
+\begin_layout Subparagraph
+Our filter seems to run relatively fast for small images, with a maximum
+ throughput of about 625 pixels per second.
+ The throughput seems to increase with the image size, up to a maximum of
+ 100,000 pixels, suggesting that the filter is more efficient for larger
+ image sizes.
+ When blurring an image with a width that is not a multiple of the number
+ of workers, the throughput is slightly decreased, due to workers being
+ left idle at the end of the row.
+ For images with a width less than the number of workers, these workers
+ will 
+\emph on
+always
+\emph default
+ be idle.
+ When blurring an image with a large height dimension, the throughput is
+ decreased, as can be seen with the time taken for the giraffe image.
+ This image has a throughput of 546 pixels/s, much lower than square images
+ of a similar size (which are ~600 pixels/s).
+\end_layout
+
+\begin_layout Subparagraph
+The number of workers the filter employs seems to have little difference
+ up to 3, then the difference in times seems to vary greatly, with the overall
+ mean increasing.
+ The XMOS board being used for testing has a small number of available cores
+ so this seems to follow, as having a large number of active processes means
+ they are not all running concurrently.
+ If the hardware available had more cores, or the filter was being run across
+ multiple boards, we expect the optimal number of workers would increase.
+\end_layout
+
+\begin_layout Standard
+\align center
+\begin_inset Graphics
+	filename /home/luke/Pictures/Screenshot from 2013-01-23 10:52:34.png
+	scale 30
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subparagraph
+One inefficiency in the design is that a large number of pixels are sent
+ to communicate multiple blurred pixels.
+ This is due to the workers not storing pixels that they receive, as a memory
+ optimisation, and also due to the linear way in which work is allocated.
+ To improve upon this workers should be sent multiple consecutive pixels
+ to process so that pixels common to these can be maintained, saving on
+ communications overheads.
+ 
+\end_layout
+
+\begin_layout Subparagraph
+A second inefficiency is the interaction between the distributor, workers
+ and the collector.
+ At present the distributor gives the works data to process and then receives
+ the completed work, which is passed to the collector.
+ If the collector handled received the completed work directly, this would
+ ensure that any processed pixels could be written to the output file immediatel
+y, without having to wait for the distributor to collect them and send them.
+\end_layout
+
+\begin_layout Subparagraph
+A final improvement involves using a circular buffer to allocate pixels
+ to workers.
+ This will resolve the issue where certain line lengths are not optimal,
+ as described in paragraph one of this section.
+ Using a circular buffer would ensure that all workers are allocated pixels
+ to blur, where possible.
+\end_layout
+
+\end_body
+\end_document
